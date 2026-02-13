@@ -1,0 +1,34 @@
+{
+  "name": "proyecto-practica",
+  "version": "1.0.0",
+  "description": "Gestion de horas para licencia de conducir",
+  "homepage": "https://github.com/SebaMD/proyecto-practica#readme",
+  "bugs": {
+    "url": "https://github.com/SebaMD/proyecto-practica/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SebaMD/proyecto-practica.git"
+  },
+  "license": "ISC",
+  "author": "Sebastian Medina",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "joi": "^18.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "pg": "^8.18.0",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
