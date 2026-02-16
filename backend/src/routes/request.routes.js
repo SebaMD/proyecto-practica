@@ -9,7 +9,7 @@ import { verifyRoles } from "../middleware/authorization.middleware.js";
 
 const router = Router();
 
-router.get("/", verifyRoles(["funcionario"]), getRequests);//! Da resultado bueno, pero no devuelve nada, deveria decir que no hay ninguna requests, cuando si existe la muestra bien
+router.get("/", verifyRoles(["funcionario", "ciudadano"]), getRequests);
 router.get("/:id", verifyRoles(["funcionario"]), getRequestById);
 
 router.post("/", verifyRoles(["ciudadano"]), createRequest);

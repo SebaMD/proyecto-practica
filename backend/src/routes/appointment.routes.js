@@ -16,7 +16,7 @@ const router = Router();
 router.use(authenticateJwt);
 
 router.get("/", verifyRoles(["supervisor", "ciudadano"]), getAppointment); 
-router.get("/filter", verifyRoles(["ciudadano", "supervisor"]), getPetitionsByPrerequisites); //! no funciona bien
+router.get("/filter", verifyRoles(["ciudadano", "supervisor"]), getPetitionsByPrerequisites);
 
 router.get("/:id", verifyRoles(["ciudadano"]), getAppointmentId);
 

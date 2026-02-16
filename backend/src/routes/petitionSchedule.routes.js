@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createPetitionSchedule } from "../controllers/petitionSchedule.controller.js";
+import { createPetitionSchedule, getPetitionSchedules } from "../controllers/petitionSchedule.controller.js";
 import { authenticateJwt } from "../middleware/authentication.middleware.js";
 
 const router = Router();
@@ -7,7 +7,6 @@ const router = Router();
 router.use(authenticateJwt);
 
 router.post("/", createPetitionSchedule);
-
-//!Falta
+router.get("/", getPetitionSchedules);
 
 export default router;

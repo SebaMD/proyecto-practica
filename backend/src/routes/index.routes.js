@@ -14,7 +14,7 @@ export function routerApi(app){
 
     router.use("/auth", authRoutes);
     router.use("/periods", verifyRoles(["funcionario"]), periodRoutes);
-    router.use("/petitions", verifyRoles(["funcionario"]), petitionRoutes);
+    router.use("/petitions", petitionRoutes);
     router.use("/petitionSchedules", verifyRoles(["funcionario"]), petitionScheduleRoutes);
     router.use("/appointments", appointmentRoutes);
     router.use("/requests", requestRoutes);

@@ -10,13 +10,13 @@ export async function createRequestService(data) {
     return await requestRepository.save(newRequest);
     }
 
-    export async function getRequestsService() {
+export async function getRequestsService() {
     const requestRepository = AppDataSource.getRepository(Request);
 
     return await requestRepository.find();
-    }
+}
 
-    export async function getRequestByIdService(id) {
+export async function getRequestByIdService(id) {
     const requestRepository = AppDataSource.getRepository(Request);
     const request = await requestRepository.findOneBy({ id: parseInt(id) });
 

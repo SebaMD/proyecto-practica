@@ -11,33 +11,29 @@ export const PetitionSchedule = new EntitySchema({
             primary: true,
             generated: true,
         },
-
         petitionId: {
             type: "int",
             nullable: false,
         },
-
         date: {
             type: "date",
             nullable: false,
             comment: "Fecha de atención (YYYY-MM-DD)",
         },
-
         startTime: {
             type: "time",
             nullable: false,
         },
-
+        status: {
+            type: "enum",
+            enum: ["disponible", "pendiente", "tomada"],
+            default: "disponible",
+            nullable: false,
+        },
         endTime: {
             type: "time",
             nullable: false,
         },
-
-        isTaken: {
-            type: "boolean",
-            default: false,
-        },
-
         createdAt: {
             type: "timestamp",
             default: () => "CURRENT_TIMESTAMP",

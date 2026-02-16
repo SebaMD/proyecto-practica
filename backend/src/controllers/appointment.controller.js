@@ -3,8 +3,19 @@ import {
     handleErrorServer,
     handleSuccess,
 } from "../handlers/responseHandlers.js";
-import { createAppointmentBodyValidation, updateStatusValidation } from "../validations/appointment.validation.js";
-import { createAppointmentService, getAppointmentService, getAppointmentIdService, deleteAppointmentIdService, updateStatusService, hasAppointmentToPetitionService, getPetitionsByPrerequisitesService } from "../services/appointment.service.js";
+import { 
+    createAppointmentBodyValidation, 
+    updateStatusValidation 
+} from "../validations/appointment.validation.js";
+import { 
+    createAppointmentService, 
+    getAppointmentService, 
+    getAppointmentIdService, 
+    deleteAppointmentIdService, 
+    updateStatusService, 
+    hasAppointmentToPetitionService, 
+    getPetitionsByPrerequisitesService 
+} from "../services/appointment.service.js";
 import { getPetitionsService } from "../services/petition.service.js";
 import jwt from "jsonwebtoken";
 
@@ -25,7 +36,7 @@ export async function createAppointment(req, res){
         const token = authHeader.split(" ")[1];
         const payload = jwt.decode/*o "verify"?*/(token, process.env.JWT_SECRET);
 
-        const data = {...req.body, userId: payload.id};
+        const data = {...req.body, userId: payload.id}; //!ojo el userId no es tan necesario ya que lo ve por el id del token
         
         const { error } = createAppointmentBodyValidation.validate(data);
 
@@ -113,6 +124,12 @@ export async function updateStatus(req, res){
         const data = req.body;
         const { id } = req.params;
 
+        const authHeader = req.headers["authorization"];
+        if(!authHeader) return handleErrorClient(res, 401, "Token no proporcionado");
+
+        const token = authHeader.split(" ")[1];
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
+
         const appointment = await getAppointmentIdService(id);
         if(appointment.status !== "pendiente"){
             return handleErrorClient(res, 400, "La inscripcion ya fue revisada");
@@ -121,7 +138,7 @@ export async function updateStatus(req, res){
         const { error } = updateStatusValidation.validate(data);
         if ( error ) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
 
-        const updateStatus = await updateStatusService(id, data);
+        const updateStatus = await updateStatusService(id, data, payload.id);
         handleSuccess(res, 200, "Solicitud revisada exitosamente", updateStatus);
     } catch (error) {
         handleErrorServer(res, 500, "Error al revisar la inscripcion", error.message);
@@ -130,23 +147,14 @@ export async function updateStatus(req, res){
 
 export async function getPetitionsByPrerequisites(req, res){
     try {
-        let petitions = await getPetitionsByPrerequisitesService();
-
-        if (petitions.length === 0) {
-            return handleErrorClient(res, 404, "No se encontraron peticiones sin requisitos previos.");
-        }
-
         const authHeader = req.headers["authorization"];
         const token = authHeader.split(" ")[1];
         const payload = jwt.decode(token, process.env.JWT_SECRET);
 
-        if(payload.role === "ciudadano"){
-            petitions = petitions.filter(e => e.status === "aprobado");
+        let petitions = await getPetitionsByPrerequisitesService();
 
-            if (petitions.length === 0) {
+        if (petitions.length === 0) {
             return handleErrorClient(res, 404, "No se encontraron peticiones sin requisitos previos.");
-            }
-
         }
 
         return handleSuccess(res, 200, "Peticiones sin requisitos obtenidos exitosamente", petitions);

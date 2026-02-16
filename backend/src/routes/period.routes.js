@@ -20,7 +20,7 @@ router.post("/", createPeriod);
 router.get("/active", getActivePeriod);
 
 router.get("/:id", getPeriodById);
-router.put("/:id", updatePeriod);//! revisar , igual esta raro
+router.put("/:id", updatePeriod);
 router.delete("/:id", deletePeriod);
 
 export default router;

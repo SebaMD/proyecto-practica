@@ -1,7 +1,6 @@
-"use strict";
-
 import { AppDataSource } from "../config/configDb.js";
 import { Petition } from "../entities/petition.entity.js";
+import { Appointment } from "../entities/appointment.entity.js";
 
 export async function createPetitionService(data) {
     const petitionRepository = AppDataSource.getRepository(Petition);
@@ -39,8 +38,22 @@ export async function updatePetitionService(id, data) {
 
 export async function deletePetitionService(id) {
     const petitionRepository = AppDataSource.getRepository(Petition);
-    await getPetitionByIdService(id);
-    const result = await petitionRepository.delete(id);
+    const appointmentRepository = AppDataSource.getRepository(Appointment);
+
+    const petition = await getPetitionByIdService(id);
+
+    const approvedAppointments = await appointmentRepository.find({
+        where: {
+            petitionId: petition.id,
+            status: "aprobado"
+        }
+    });
+
+    if (approvedAppointments.length > 0) {
+        throw new Error("No se puede eliminar la petición porque tiene ciudadanos inscritos");
+    }
+
+    const result = await petitionRepository.delete(petition.id);
 
     if (result.affected === 0) {
         throw new Error("No se pudo eliminar la peticion");

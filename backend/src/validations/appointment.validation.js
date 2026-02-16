@@ -1,7 +1,7 @@
 import Joi from "joi";
 
 export const createAppointmentBodyValidation = Joi.object({
-    userId: Joi.number()
+    userId: Joi.number() //!ojo este no es tan necesario ya que lo ve por el id del token
         .required()
         .integer()
         .min(1)

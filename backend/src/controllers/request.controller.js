@@ -60,7 +60,8 @@ export async function getRequests(req, res) {
         requests = requests.filter((request) => request.citizenId === payload.id);
         }
 
-        if (requests.length === 0) return handleSuccess(res, 204, "No hay solicitudes disponibles");
+        if (requests.length === 0) return handleSuccess(res, 200, "No hay solicitudes disponibles");
+
         handleSuccess(res, 200, "Solicitudes obtenidas exitosamente", requests);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener las solicitudes", error.message);

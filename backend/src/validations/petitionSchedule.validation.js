@@ -1,7 +1,7 @@
 import Joi from "joi";
 
 export const petitionScheduleValidation = Joi.object({
-    petitionId: Joi.number().integer().required(),
+    petitionId: Joi.number().integer().min(1).required(),
 
     date: Joi.date().required(),
 

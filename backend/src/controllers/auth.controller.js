@@ -1,5 +1,12 @@
-import { loginService, registerService } from "../services/auth.service.js";
-import { handleErrorClient, handleErrorServer, handleSuccess } from "../handlers/responseHandlers.js";
+import { 
+    handleErrorClient, 
+    handleErrorServer, 
+    handleSuccess 
+} from "../handlers/responseHandlers.js";
+import { 
+    loginService, 
+    registerService 
+} from "../services/auth.service.js";
 import {
     userLoginBodyValidation,
     userRegisterBodyValidation

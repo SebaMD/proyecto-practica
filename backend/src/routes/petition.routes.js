@@ -9,15 +9,16 @@ import {
     updatePetition,
     deletePetition,
 } from "../controllers/petition.controller.js";
+import { verifyRoles } from "../middleware/authorization.middleware.js";
 
 const router = Router();
 
 router.use(authenticateJwt);
 
-router.get("/", getAllPetitions);                    
-router.get("/:id", getPetitionById);                 
-router.post("/", createPetition);                    
-router.patch("/:id", updatePetition);                
-router.delete("/:id", deletePetition);               
+router.get("/", verifyRoles(["funcionario", "ciudadano"]), getAllPetitions);                    
+router.get("/:id", verifyRoles(["funcionario", "ciudadano"]), getPetitionById);                 
+router.post("/", verifyRoles(["funcionario"]), createPetition);                    
+router.patch("/:id", verifyRoles(["funcionario"]), updatePetition);                
+router.delete("/:id", verifyRoles(["funcionario"]), deletePetition);               
 
 export default router;

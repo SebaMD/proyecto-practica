@@ -1,8 +1,17 @@
-"use strict";
-
-import * as periodService from "../services/period.service.js";
-import { checkActivePeriodService } from "../services/period.service.js";
-import { handleErrorClient, handleErrorServer, handleSuccess } from "../handlers/responseHandlers.js";
+import { 
+    handleErrorClient, 
+    handleErrorServer, 
+    handleSuccess 
+} from "../handlers/responseHandlers.js";
+import { 
+    createPeriodService, 
+    getPeriodService, 
+    getPeriodByIdService, 
+    checkActivePeriodService, 
+    updatePeriodService, 
+    deletePeriodService,
+    checkPeriodOverlapService
+} from "../services/period.service.js";
 import { periodBodyValidation } from "../validations/period.validation.js";
 
 export async function createPeriod(req, res) {
@@ -14,7 +23,7 @@ export async function createPeriod(req, res) {
         return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
         }
 
-        const overlap = await periodService.checkPeriodOverlapService(
+        const overlap = await checkPeriodOverlapService(
             value.startDate,
             value.closingDate
         );
@@ -27,7 +36,7 @@ export async function createPeriod(req, res) {
             );
         }
 
-        const newPeriod = await periodService.createPeriodService(value);
+        const newPeriod = await createPeriodService(value);
         handleSuccess(res, 201, "Período creado exitosamente", newPeriod);
     } catch (error) {
         handleErrorServer(res, 500, "Error al crear el período", error.message);
@@ -36,7 +45,7 @@ export async function createPeriod(req, res) {
 
 export async function getPeriods(req, res) {
     try {
-        const periods = await periodService.getPeriodService();
+        const periods = await getPeriodService();
         handleSuccess(res, 200, "Períodos obtenidos exitosamente", periods);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener los períodos", error.message);
@@ -46,7 +55,7 @@ export async function getPeriods(req, res) {
 export async function getPeriodById(req, res) {
     try {
         const { id } = req.params;
-        const period = await periodService.getPeriodByIdService(id);
+        const period = await getPeriodByIdService(id);
         handleSuccess(res, 200, "Período encontrado", period);
     } catch (error) {
         if (error.message === "Período no encontrado") {
@@ -66,9 +75,10 @@ export async function updatePeriod(req, res) {
         return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
         }
 
-        const overlap = await periodService.checkPeriodOverlapService(
+        const overlap = await checkPeriodOverlapService(
             value.startDate,
             value.closingDate,
+            id
         );
 
         if (overlap) {
@@ -79,7 +89,7 @@ export async function updatePeriod(req, res) {
             );
         }
 
-        const periodUpdate = await periodService.updatePeriodService(id, value);
+        const periodUpdate = await updatePeriodService(id, value);
         handleSuccess(res, 200, "Período actualizado exitosamente", periodUpdate);
     } catch (error) {
         if (error.message === "Período no encontrado") {
@@ -92,7 +102,7 @@ export async function updatePeriod(req, res) {
 export async function deletePeriod(req, res) {
     try {
         const { id } = req.params;
-        const result = await periodService.deletePeriodService(id);
+        const result = await deletePeriodService(id);
         handleSuccess(res, 200, result.message);
     } catch (error) {
         if (error.message === "Período no encontrado") {

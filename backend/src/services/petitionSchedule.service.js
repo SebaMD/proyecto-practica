@@ -43,8 +43,22 @@ export async function createPetitionScheduleService(data) {
         date,
         startTime,
         endTime,
-        isTaken: false,
+        status: "disponible",
     });
 
     return await scheduleRepository.save(schedule);
+}
+
+export async function getPetitionSchedulesService(petitionId, date) {
+    const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
+
+    return await scheduleRepository.find({
+        where: {
+            petitionId,
+            date,
+        },
+        order: {
+            startTime: "ASC"
+        }
+    });
 }

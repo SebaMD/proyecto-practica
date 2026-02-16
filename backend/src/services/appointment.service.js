@@ -1,7 +1,7 @@
 import { AppDataSource } from "../config/configDb.js";
 import { Appointment } from "../entities/appointment.entity.js";
 import { Petition } from "../entities/petition.entity.js";
-import { IsNull, Not } from "typeorm";
+import { IsNull } from "typeorm";
 import { PetitionSchedule } from "../entities/petitionSchedule.entity.js";
 
 export async function createAppointmentService(data){
@@ -11,11 +11,15 @@ export async function createAppointmentService(data){
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
 
     // Verificar que la hora exista y esté disponible
-    const schedule = await scheduleRepository.findOne({ where: { id: petitionScheduleId, petitionId, isTaken: false } });
+    const schedule = await scheduleRepository.findOne({ where: { id: petitionScheduleId, petitionId } });
 
-    if (!schedule) {
-        throw new Error("La hora seleccionada no está disponible");
+    if (!schedule || schedule.status !== "disponible") {
+        throw new Error("La hora no está disponible");
     }
+
+    //Bloqueamos el horario
+    schedule.status = "pendiente";
+    await scheduleRepository.save(schedule);
 
     // Evitar doble inscripcion a la misma peticion
     const existingAppointment = await appointmentRepository.findOne({ where: { userId, petitionId } });
@@ -24,10 +28,7 @@ export async function createAppointmentService(data){
         throw new Error("Ya tienes una inscripción para esta petición");
     }
 
-    schedule.isAvailable = false; //Bloquea la hora
-    await scheduleRepository.save(schedule);
-
-    const newAppointment = appointmentRepository.create({ userId, petitionId, petitionScheduleId, status: "pendiente", });
+    const newAppointment = appointmentRepository.create({ userId, petitionId, petitionScheduleId, status: "pendiente" });
 
     return await appointmentRepository.save(newAppointment);
 }
@@ -78,27 +79,34 @@ export async function deleteAppointmentIdService(id){
     return true;
 }
 
-export async function updateStatusService(id, data){
+export async function updateStatusService(id, data, supervisorId){
     const appointmentRepository = AppDataSource.getRepository(Appointment);
+    const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
     const appointment = await getAppointmentIdService(id);
 
     if (!appointment) throw new Error("Inscripción no encontrada");
 
     const Status = appointment.status;
+
     appointment.status = data.status;
     appointment.reviewedAt = new Date();
+    appointment.supervisorId = supervisorId;
 
     if (data.status === "rechazado") appointment.rejectReason = data.rejectReason;
 
-    const petitionRepository = AppDataSource.getRepository(Petition);
-    const petition = await petitionRepository.findOne({ where: { id: appointment.petitionId } });
-    
-    if (petition) {
-        if ((Status === "pendiente" || Status === "aprobado") && data.status === "rechazado") {
-            petition.quotas += 1;
-            await petitionRepository.save(petition);
-        }
+    const schedule = await scheduleRepository.findOne({ where: { id: appointment.petitionScheduleId } });
+
+    if(!schedule) throw new Error("Horario no encontrado");
+
+    if(data.status === "aprobado"){
+        schedule.status = "tomada";
     }
+
+    if(data.status === "rechazado" && Status === "pendiente"){
+        schedule.status = "disponible";
+    }
+
+    await scheduleRepository.save(schedule);
 
     return await appointmentRepository.save(appointment);
 }
@@ -106,12 +114,10 @@ export async function updateStatusService(id, data){
 export async function getPetitionsByPrerequisitesService() {
     const petitionRepository = AppDataSource.getRepository(Petition);
 
-    const petitions = await petitionRepository.find({
+    return await petitionRepository.find({
         where: [
             { prerrequisites: IsNull() }, 
             { prerrequisites: "" }         
         ]
     });
-
-    return petitions.length > 0 ? petitions : null;
 }
