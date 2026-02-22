@@ -24,7 +24,7 @@ const menuItems = [
         title: "Periodos", 
         icon: CalendarRange, 
         route: "/periods", 
-        roles: ["funcionario", "administrador"] 
+        roles: ["funcionario"] 
     },
     { 
         title: "Solicitudes", 
@@ -47,13 +47,13 @@ const menuItems = [
     { 
         title: "Mis Inscripciones", 
         icon: FilePenLine, 
-        route: "/inscription", 
+        route: "/appointments", 
         roles: ["ciudadano"] 
     },
     { 
         title: "Gestión Inscripciones", 
         icon: FilePenLine, 
-        route: "/inscription", 
+        route: "/appointments", 
         roles: ["supervisor"] 
     },
 ];

@@ -67,30 +67,25 @@ export function Badge({
         colorAttributes = "bg-gray-200 text-gray-700 border-gray-200";
     }
 
-    if (text.length === 0) text = "(sin texto)";
+    const label = text?.length ? text : "(sin texto)";
 
     const handleClick = () => {
-        if (callback) {
-            // Cambia el diseño solo si canToggleActive = true
-            canToggleActive && setActive((prev) => !prev);
+        if (!callback) return;
+            
+        if (canToggleActive) setActive((prev) => !prev);
 
             // Asegurarse que la función recibe el parámetro badgeId
-            callback(badgeId);
-        }
+        callback(badgeId);
     };
 
     return (
         <button
             id={badgeId}
             onClick={handleClick}
-            className={
-                "text-xs px-2 py-1 flex gap-2 items-center justify-center rounded-md border " +
-                colorAttributes +
-                " transition-all hover:brightness-95"
-            }
-            >
+            className={`text-xs px-2 py-1 flex gap-2 items-center justify-center rounded-md border ${colorAttributes} transition-all hover:brightness-95`}
+        >
             {Icon && showIcon && <Icon className="h-4 w-4 pointer-events-none" />}
-            {text}
+            {label}
         </button>
     );
 }

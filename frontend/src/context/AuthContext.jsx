@@ -12,23 +12,31 @@ export const AuthProvider = ({ children }) => {
         const token = cookies.get("jwt-auth");
         const storedUser = sessionStorage.getItem("usuario");
 
+        if (!token || !storedUser) {
+            cookies.remove("jwt-auth");
+            sessionStorage.removeItem("usuario");
+            setLoading(false);
+            return;
+        }
+        
         if(token && storedUser){
             try{
                 const decoded = jwtDecode(token);
 
-            if (decoded.exp * 1000 > Date.now()) {
-                setUser(JSON.parse(storedUser));
-            } else {
-            cookies.remove("jwt-auth");
-            sessionStorage.removeItem("usuario");
-            }
-            }catch(error){
+                if (decoded.exp * 1000 > Date.now()) {
+                    setUser(JSON.parse(storedUser));
+                } else {
+                    cookies.remove("jwt-auth");
+                    sessionStorage.removeItem("usuario");
+                }
+            }catch (error){
                 console.error("Error al decodificar datos:", error);
                 cookies.remove("jwt-auth");
                 sessionStorage.removeItem("usuario");
+            } finally {
+                setLoading(false);
             }
         }
-        setLoading(false);
     }, []);
 
     return(

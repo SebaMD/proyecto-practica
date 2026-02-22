@@ -7,12 +7,10 @@ import axios from "./root.service.js";
  */
 export async function getPetitionSchedules(petitionId, date) {
     try {
-        const response = await axios.get("/petition-schedules", {
-            params: {
-                petitionId,
-                date,
-            },
-        });
+        const params = { petitionId };
+        if (date) params.date = date;
+
+        const response = await axios.get("/petitionSchedules", { params });
 
         return {
             success: true,
@@ -23,7 +21,7 @@ export async function getPetitionSchedules(petitionId, date) {
         console.error("Error en getPetitionSchedules():", error);
         return {
             success: false,
-            message: error.response?.data?.message ||"Error al obtener los horarios",
+            message: error.response?.data?.message || "Error al obtener los horarios",
         };
     }
 }
@@ -34,7 +32,7 @@ export async function getPetitionSchedules(petitionId, date) {
  */
 export async function createPetitionSchedule(data) {
     try {
-        const response = await axios.post("/petition-schedules", data);
+        const response = await axios.post("/petitionSchedules", data);
 
         return {
             success: true,

@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 const Error404 = () => {
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center text-center p-4">
-            <h1 className="text-9x1 font-bold text-purple-600">404</h1>
-            <h2 className="text-3x1 font-semibold text-gray-800 mt-4 mb-2">Página No Encontradas</h2>
+            <h1 className="text-9xl font-bold text-purple-600">404</h1>
+            <h2 className="text-3xl font-semibold text-gray-800 mt-4 mb-2">Página No Encontrada</h2>
             <p className="text-gray-600 mb-6">Lo sentimos, la página que buscas no existe.</p>
             <Link
                 to="/home"

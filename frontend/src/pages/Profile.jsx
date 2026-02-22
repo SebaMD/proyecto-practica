@@ -9,8 +9,8 @@ import {
     FilePenLine
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getAppoinment } from "@services/appoinment.service";
-import { getPetition } from "@services/petition.service";
+import { getAppointments } from "@services/appointment.service";
+import { getPetitions } from "@services/petition.service";
 import { showErrorAlert } from "@helpers/sweetAlert";
 
 const Profile = () => {
@@ -29,7 +29,7 @@ const Profile = () => {
 
         try {
             setLoading(true);
-            const result = await getAppoinment();
+            const result = await getAppointments();
 
             if (result.success) {
                 setAppointmentCount(result.data?.length || 0);
@@ -46,7 +46,7 @@ const Profile = () => {
 
         try {
             setLoading(true);
-            const result = await getPetition();
+            const result = await getPetitions();
 
             if (result.success) {
                 setPetitionCount(result.data?.length || 0);

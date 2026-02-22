@@ -4,13 +4,13 @@ import Root from '@pages/Root'
 import Error404 from '@pages/Error404'
 import Login from '@pages/Login'
 import Home from '@pages/Home'
-import Appointments from '@pages/Appointments'
+import Appointments from '@pages/Appointment'
 import ProtectedRoute from '@components/ProtectedRoute'
 import '@styles/styles.css';
 import Logout from '@pages/Logout'
 import Users from '@pages/Users'
 import Requests from '@pages/Requests'
-import Petitions from '@pages/Petitions'
+import Petitions from '@pages/Petition'
 import Periods from '@pages/Period'
 import Profile from '@pages/Profile'
 
@@ -51,7 +51,7 @@ const router = createBrowserRouter([
       {
         path: "/periods",
         element: (
-          <ProtectedRoute allowedRoles={["funcionario", "administrador"]}>
+          <ProtectedRoute allowedRoles={["funcionario"]}>
             <Periods />
           </ProtectedRoute>
         )
@@ -73,9 +73,9 @@ const router = createBrowserRouter([
         )
       },
       {
-        path: "/Appointments",
+        path: "/appointments",
         element: (
-          <ProtectedRoute allowedRoles={["ciudadano", "supervisor", "funcionario"]}>
+          <ProtectedRoute allowedRoles={["ciudadano", "supervisor"]}>
             <Appointments />
           </ProtectedRoute>
         )

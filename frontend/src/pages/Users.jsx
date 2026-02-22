@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Sidebar } from "@components/Sidebar";
-import { Header } from "@components/Header";
+import { Navbar } from "@components/Navbar";
 import { Edit2, Trash2, UserPlus } from "lucide-react";
 import { getUsers, editUser, deleteUser } from "@services/user.service";
 import { register } from "@services/auth.service";
@@ -15,7 +14,7 @@ const Users = () => {
         try {
             setLoading(true);
             const result = await getUsers();
-            setUsers(result.data);
+            setUsers(result.success ? (result.data || []) : []);
         } catch (error) {
             console.error("Error al obtener usuarios", error);
         } finally {
@@ -125,10 +124,9 @@ const Users = () => {
 
     return (
         <div className="min-h-screen bg-gray-100">
-            <Header />
-            <Sidebar />
+            <Navbar/>
 
-            <div className="ml-72 flex flex-col p-4">
+            <div className="pt-20 p-4 flex flex-col">
                 {/* Contenido de la página */}
                 <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
                     {/* Titulo, descripción y boton de agregar usuario */}
@@ -188,10 +186,10 @@ const Users = () => {
                                         <td className="min-w-28 p-4 align-middle">{user.rut}</td>
                                         <td className="min-w-28 p-4 align-middle">{roleText[user.role]}</td>
                                         <td className="min-w-28 p-4 align-middle">
-                                            {dateFormatter(user.created_at)}
+                                            {dateFormatter(user.createdAt)}
                                         </td>
                                         <td className="min-w-28 p-4 align-middle">
-                                            {dateFormatter(user.updated_at)}
+                                            {dateFormatter(user.updatedAt)}
                                         </td>
                                         <td className="min-w-16 p-4 flex flex-row justify-center items-center gap-2">
                                             {user.role !== "administrador" ? (

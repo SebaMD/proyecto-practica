@@ -13,7 +13,7 @@ export async function getUsers(){
         console.error("Error en el servicio de obtener usuarios: ", error.response?.data);
         return{
             success: false,
-            message: error.response?.data?.message || "Error al conectar co el servidor",
+            message: error.response?.data?.message || "Error al conectar con el servidor",
         };
     }
 }
