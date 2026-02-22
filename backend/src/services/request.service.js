@@ -25,7 +25,7 @@ export async function getRequestByIdService(id) {
     return request;
 }
 
-// Verifica si existe una solicitud en estado pendiente o aprobada según el id de la peticion
+// Verifica si existe una solicitud en status pendiente o aprobada según el id de la peticion
 export async function hasRequestOfPetitionService(citizenId, petitionId) {
     const requestRepository = AppDataSource.getRepository(Request);
     const request = await requestRepository.find({
@@ -49,28 +49,28 @@ export async function reviewRequestService(id, data) {
     request.reviewedAt = new Date(); // Revisado en la fecha actual
 
     if (data.status === "rechazado") {
-        request.reviewComment = data.reviewComment;
+        request.rejectReason = data.rejectReason;
     }
 
     const updatedRequest = await requestRepository.save(request);
 
     // En caso de aprobar la solicitud, se crea la inscripción
     if (request.status === "aprobado") {
-        const { citizenId, petitionId } = request;
-        const inscriptionRepository = AppDataSource.getRepository(Appointment);
-        const petitionRepository = AppDataSource.getRepository(Petition);
-        const petition = await petitionRepository.findOne({ where: { id: petitionId } });
+        if (!data.petitionScheduleId) {
+            throw new Error("petitionScheduleId es obligatorio para aprobar la solicitud");
+        }
 
-        if (petition.quotas > 0) petition.quotas -= 1;
-        await petitionRepository.save(petition);
-        const newAppointment = inscriptionRepository.create({
-        userId: citizenId,
-        petitionId: petition.id,
-        estado: "aprobado",
-        reviewedAt: new Date(),
+        const { citizenId, petitionId } = request;
+        const appointmentRepository = AppDataSource.getRepository(Appointment);
+
+        const newAppointment = appointmentRepository.create({
+            userId: citizenId,
+            petitionId,
+            petitionScheduleId: data.petitionScheduleId,
+            status: "pendiente",
         });
 
-        return await inscriptionRepository.save(newAppointment);
+        return await appointmentRepository.save(newAppointment);
     }
 
     return updatedRequest;

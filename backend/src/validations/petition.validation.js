@@ -28,7 +28,7 @@ export const petitionBodyValidation = Joi.object({
     }),
     dailyQuotas: Joi.number().integer().min(1).max(15).required().messages({
         "number.base": "Los cupos deben ser un número",
-        "number.integer": "Los cupos deben ser un número entero",
+        "number.integer": "Los cupos deben ser un número",
         "number.min": "Debe haber al menos 1 cupo",
         "number.max": "No puede haber más de 15 cupos",
         "any.required": "Los cupos son obligatorios"

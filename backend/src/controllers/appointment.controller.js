@@ -63,12 +63,12 @@ export async function getAppointment(req, res){
 
         if (payload.role === "ciudadano"){
             appointments = appointments.filter((appointment) => appointment.userId === payload.id);
-        } else if (payload.role === "supervisor"){
-            const petitions = await getPetitionsService();
-
-            const myPetitions = petitions.filter(petition => petition.supervisorId === payload.id).map(petition => petition.id);
-
-            appointments = appointments.filter((appointment) => myPetitions.includes(appointment.petitionId));
+        } else if (payload.role === "supervisor") {
+            appointments = appointments.filter(
+                (appointment) =>
+                    appointment.status === "pendiente" ||
+                    appointment.supervisorId === payload.id
+            );
         }
 
         if(appointments.length < 1) return handleSuccess(res, 404, "No se encontro ninguna inscripcion");
@@ -121,6 +121,7 @@ export async function deleteAppointmentId(req, res){
 
 export async function updateStatus(req, res){
     try {
+        const MAX_APPROVALS_PER_SUPERVISOR_PER_DAY = 5;
         const data = req.body;
         const { id } = req.params;
 
@@ -137,6 +138,30 @@ export async function updateStatus(req, res){
 
         const { error } = updateStatusValidation.validate(data);
         if ( error ) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+
+        if (data.status === "aprobado") {
+            const allAppointments = await getAppointmentService();
+            const currentAppointment = allAppointments.find((a) => a.id === Number(id));
+
+            if (!currentAppointment?.schedule?.date) {
+                return handleErrorClient(res, 400, "No se pudo validar la fecha de la inscripcion");
+            }
+
+            const approvedCountSameDate = allAppointments.filter(
+                (a) =>
+                    a.status === "aprobado" &&
+                    a.supervisorId === payload.id &&
+                    a.schedule?.date === currentAppointment.schedule.date
+            ).length;
+
+            if (approvedCountSameDate >= MAX_APPROVALS_PER_SUPERVISOR_PER_DAY) {
+                return handleErrorClient(
+                    res,
+                    409,
+                    `El supervisor ya alcanzó el máximo de ${MAX_APPROVALS_PER_SUPERVISOR_PER_DAY} aprobaciones para la fecha ${currentAppointment.schedule.date}`
+                );
+            }
+        }
 
         const updateStatus = await updateStatusService(id, data, payload.id);
         handleSuccess(res, 200, "Solicitud revisada exitosamente", updateStatus);

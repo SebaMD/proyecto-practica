@@ -1,7 +1,7 @@
 import Joi from "joi";
 
 export const createRequestBodyValidation = Joi.object({
-    petitionId: Joi.number().required().integer().min(0).messages({
+    petitionId: Joi.number().required().integer().min(1).messages({
         "any.required": "El ID de la peticion es obligatorio.",
         "number.base": "El ID de la peticion debe ser un número.",
         "number.integer": "El ID de la peticion debe ser un número entero.",
@@ -41,7 +41,20 @@ export const reviewRequestValidation = Joi.object({
             "string.min": "El comentario del revisor debe contener al menos 5 caracteres.",
             "string.max": "El comentario del revisor puede contener hasta 300 caracteres.",
         }),
-    })
+    }),
+    petitionScheduleId: Joi.when("status", {
+        is: "aprobado",
+        then: Joi.number()
+        .integer()
+        .min(1)
+        .required()
+        .messages({
+            "any.required": "El horario es obligatorio al aprobar la solicitud.",
+            "number.base": "El horario debe ser un número.",
+            "number.integer": "El horario debe ser un número entero.",
+            "number.min": "El horario debe ser mayor a 0.",
+        }),
+    }),
 })
 .unknown(false)
 .options({ abortEarly: false })

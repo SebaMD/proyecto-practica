@@ -45,7 +45,19 @@ export async function hasAppointmentToPetitionService(userId, petitionId){
 export async function getAppointmentService(){
     const appointmentRepository = AppDataSource.getRepository(Appointment);
 
-    return await appointmentRepository.find();
+    return await appointmentRepository.find({
+        relations: {
+            citizen: true,
+            schedule: true,
+            petition: {
+                supervisor: true,
+            },
+            supervisor: true,
+        },
+        order: {
+            createdAt: "DESC",
+        },
+    });
 }
 
 export async function getAppointmentIdService(id){
@@ -70,7 +82,7 @@ export async function deleteAppointmentIdService(id){
         const petition = await petitionRepository.findOne({ where: { id: appointment.petitionId } });
         
         if (petition) {
-            petition.quotas += 1;
+            petition.dailyQuotas += 1;
             await petitionRepository.save(petition);
         }
     }

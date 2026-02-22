@@ -52,13 +52,13 @@ export async function createPetitionScheduleService(data) {
 export async function getPetitionSchedulesService(petitionId, date) {
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
 
+    const where = date ? { petitionId, date } : { petitionId };
+
     return await scheduleRepository.find({
-        where: {
-            petitionId,
-            date,
-        },
+        where,
         order: {
-            startTime: "ASC"
-        }
+            date: "ASC",
+            startTime: "ASC",
+        },
     });
 }

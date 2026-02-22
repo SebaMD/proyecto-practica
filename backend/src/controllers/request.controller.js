@@ -16,9 +16,20 @@ import {
     reviewRequestValidation,
 } from "../validations/request.validation.js";
 import jwt from "jsonwebtoken";
+import { checkActivePeriodService } from "../services/period.service.js";
 
 export async function createRequest(req, res) {
     try {
+        // Solo permitir creación de solicitudes cuando hay período activo
+        const isPeriodActive = await checkActivePeriodService();
+        if (!isPeriodActive) {
+            return handleErrorClient(
+                res,
+                403,
+                "El proceso de inscripción no está disponible para los ciudadanos en este momento."
+            );
+        }
+
         const { body } = req;
         const { error } = createRequestBodyValidation.validate(body);
 

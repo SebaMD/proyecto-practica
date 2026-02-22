@@ -13,10 +13,10 @@ export function routerApi(app){
     app.use("/api", router);
 
     router.use("/auth", authRoutes);
-    router.use("/periods", verifyRoles(["funcionario"]), periodRoutes);
+    router.use("/periods", periodRoutes);
     router.use("/petitions", petitionRoutes);
-    router.use("/petitionSchedules", verifyRoles(["funcionario"]), petitionScheduleRoutes);
+    router.use("/petitionSchedules", petitionScheduleRoutes);
     router.use("/appointments", appointmentRoutes);
     router.use("/requests", requestRoutes);
-    router.use("/users", userRoutes);
+    router.use("/users", verifyRoles(["administrador"]), userRoutes);
 }

@@ -9,18 +9,19 @@ import {
 } from "../controllers/period.controller.js";
 
 import { authenticateJwt } from "../middleware/authentication.middleware.js";
+import { verifyRoles } from "../middleware/authorization.middleware.js";
 
 const router = Router();
 
 router.use(authenticateJwt);
 
-router.get("/", getPeriods);
-router.post("/", createPeriod);
+router.get("/", verifyRoles(["funcionario"]), getPeriods);
+router.post("/", verifyRoles(["funcionario"]), createPeriod);
 
-router.get("/active", getActivePeriod);
+router.get("/active", verifyRoles(["funcionario", "ciudadano", "supervisor"]), getActivePeriod);
 
-router.get("/:id", getPeriodById);
-router.put("/:id", updatePeriod);
-router.delete("/:id", deletePeriod);
+router.get("/:id", verifyRoles(["funcionario"]),getPeriodById);
+router.put("/:id", verifyRoles(["funcionario"]),updatePeriod);
+router.delete("/:id", verifyRoles(["funcionario"]),deletePeriod);
 
 export default router;

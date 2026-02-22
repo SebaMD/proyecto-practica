@@ -15,7 +15,7 @@ const router = Router();
 
 router.use(authenticateJwt);
 
-router.get("/", verifyRoles(["funcionario", "ciudadano"]), getAllPetitions);                    
+router.get("/", verifyRoles(["funcionario", "ciudadano", "supervisor"]), getAllPetitions);                    
 router.get("/:id", verifyRoles(["funcionario", "ciudadano"]), getPetitionById);                 
 router.post("/", verifyRoles(["funcionario"]), createPetition);                    
 router.patch("/:id", verifyRoles(["funcionario"]), updatePetition);                
