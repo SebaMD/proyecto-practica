@@ -3,16 +3,16 @@ import Joi from "joi";
 export const createRequestBodyValidation = Joi.object({
     petitionId: Joi.number().required().integer().min(1).messages({
         "any.required": "El ID de la peticion es obligatorio.",
-        "number.base": "El ID de la peticion debe ser un número.",
-        "number.integer": "El ID de la peticion debe ser un número entero.",
+        "number.base": "El ID de la peticion debe ser un numero.",
+        "number.integer": "El ID de la peticion debe ser un numero entero.",
         "number.min": "El ID de la peticion debe ser un entero positivo.",
     }),
     description: Joi.string().trim().required().min(5).max(300).messages({
-        "any.required": "La descripción es obligatoria.",
-        "string.base": "La descripción debe ser de tipo String.",
-        "string.empty": "La descripción no puede estar vacía.",
-        "string.min": "La descripción debe contener al menos 5 caracteres.",
-        "string.max": "La descripción puede contener hasta 300 caracteres.",
+        "any.required": "La descripcion es obligatoria.",
+        "string.base": "La descripcion debe ser de tipo String.",
+        "string.empty": "La descripcion no puede estar vacia.",
+        "string.min": "La descripcion debe contener al menos 5 caracteres.",
+        "string.max": "La descripcion puede contener hasta 300 caracteres.",
     }),
 })
 .unknown(false)
@@ -27,33 +27,43 @@ export const reviewRequestValidation = Joi.object({
         .messages({
             "any.required": "El estado es obligatorio.",
             "any.only": 'Solo se permiten estados "aprobado", "rechazado" y "pendiente"',
-            "string.lowercase": "El estado debe estar en minúsculas",
+            "string.lowercase": "El estado debe estar en minusculas",
         }),
     rejectReason: Joi.when("status", {
         is: "rechazado",
         then: Joi.string().required()
-        .trim()
-        .min(5)
-        .max(300)
-        .messages({
-            "any.required": "El comentario del revisor es obligatorio al rechazar la solicitud.",
-            "string.base": "El comentario del revisor debe ser de tipo String.",
-            "string.min": "El comentario del revisor debe contener al menos 5 caracteres.",
-            "string.max": "El comentario del revisor puede contener hasta 300 caracteres.",
-        }),
+            .trim()
+            .min(5)
+            .max(300)
+            .messages({
+                "any.required": "El comentario del revisor es obligatorio al rechazar la solicitud.",
+                "string.base": "El comentario del revisor debe ser de tipo String.",
+                "string.min": "El comentario del revisor debe contener al menos 5 caracteres.",
+                "string.max": "El comentario del revisor puede contener hasta 300 caracteres.",
+            }),
+        otherwise: Joi.any().optional(),
     }),
-    petitionScheduleId: Joi.when("status", {
+    pickupDate: Joi.when("status", {
         is: "aprobado",
-        then: Joi.number()
-        .integer()
-        .min(1)
-        .required()
-        .messages({
-            "any.required": "El horario es obligatorio al aprobar la solicitud.",
-            "number.base": "El horario debe ser un número.",
-            "number.integer": "El horario debe ser un número entero.",
-            "number.min": "El horario debe ser mayor a 0.",
-        }),
+        then: Joi.string()
+            .pattern(/^\d{4}-\d{2}-\d{2}$/)
+            .required()
+            .messages({
+                "any.required": "La fecha de retiro es obligatoria al aprobar la solicitud.",
+                "string.pattern.base": "La fecha de retiro debe tener formato YYYY-MM-DD.",
+            }),
+        otherwise: Joi.any().optional(),
+    }),
+    pickupTime: Joi.when("status", {
+        is: "aprobado",
+        then: Joi.string()
+            .pattern(/^\d{2}:\d{2}$/)
+            .required()
+            .messages({
+                "any.required": "La hora de retiro es obligatoria al aprobar la solicitud.",
+                "string.pattern.base": "La hora de retiro debe tener formato HH:mm.",
+            }),
+        otherwise: Joi.any().optional(),
     }),
 })
 .unknown(false)
