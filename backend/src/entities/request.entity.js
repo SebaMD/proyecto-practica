@@ -35,6 +35,18 @@ export const Request = new EntitySchema({
             nullable: true,
             default: null,
         },
+        pickupDate: {
+            type: "varchar",
+            length: 10,
+            nullable: true,
+            default: null,
+        },
+        pickupTime: {
+            type: "varchar",
+            length: 5,
+            nullable: true,
+            default: null,
+        },
         reviewerId: {
             type: "int",
             nullable: true,
