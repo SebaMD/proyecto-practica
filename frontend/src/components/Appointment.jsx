@@ -153,6 +153,37 @@ export function Appointment({ appointment, onActionSuccess }) {
         });
     };
 
+    const handleViewPetitionInfo = async () => {
+        await Swal.fire({
+            title: "Detalle de la peticion",
+            width: 760,
+            html: `
+                <div class="text-left flex flex-col gap-3">
+                    <div class="border rounded-lg p-3 bg-gray-50">
+                        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Nombre</p>
+                        <p class="font-semibold text-gray-900">${appointment.petition?.name || "-"}</p>
+                    </div>
+
+                    <div class="border rounded-lg p-3">
+                        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Descripcion</p>
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap">${appointment.petition?.description || "-"}</p>
+                    </div>
+
+                    <div class="border rounded-lg p-3">
+                        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Objetivos</p>
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap">${appointment.petition?.objectives || "-"}</p>
+                    </div>
+
+                    <div class="border rounded-lg p-3 bg-gray-50">
+                        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Prerrequisitos</p>
+                        <p class="text-sm text-gray-800">${appointment.petition?.prerrequisites || "Sin prerrequisitos"}</p>
+                    </div>
+                </div>
+            `,
+            confirmButtonText: "Cerrar",
+        });
+    };
+
 
     const citizenName = appointment.citizen?.username || appointment.citizen?.email || `Ciudadano #${appointment.userId}`;
 
@@ -168,12 +199,14 @@ export function Appointment({ appointment, onActionSuccess }) {
         <div className="border border-gray-300 px-6 py-4 rounded-md bg-white flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    <p className="font-semibold text-base">
-                        {isSupervisor ? citizenName : `Solicitud #${appointment.id}`}
+                    <p className={`font-semibold ${isCiudadano ? "text-lg" : "text-base"}`}>
+                        {isSupervisor ? citizenName : petitionName}
                     </p>
-                    <p className="text-sm text-gray-600">
-                        Petición: {petitionName}
-                    </p>
+                    {isSupervisor && (
+                        <p className="text-sm text-gray-600">
+                            Petición: {petitionName}
+                        </p>
+                    )}
                 </div>
 
                 <Badge
@@ -213,6 +246,16 @@ export function Appointment({ appointment, onActionSuccess }) {
             )}
 
             <div className="flex justify-end gap-2">
+                {isCiudadano && (
+                <button
+                    onClick={handleViewPetitionInfo}
+                    className="px-3 py-1.5 text-sm border rounded-md flex items-center gap-1.5 hover:bg-indigo-50 text-indigo-700 border-indigo-200"
+                >
+                    <Eye className="h-4 w-4" />
+                    Ver
+                </button>
+                )}
+
                 {isCiudadano && appointment.status === "pendiente" && (
                 <button
                     onClick={handleDelete}
@@ -248,3 +291,5 @@ export function Appointment({ appointment, onActionSuccess }) {
 }
 
 export default Appointment;
+
+

@@ -1,15 +1,14 @@
 import { useAuth } from "@context/AuthContext";
 import {
-    GraduationCap,
+    FileText,
     House,
     MessageSquareText,
     User,
     Users,
     FilePenLine,
-    Bolt,
-    IdCardLanyard,
-    UserCog,
-    CalendarRange
+    CalendarRange,
+    FileSearchCorner,
+    KeyRound
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -21,22 +20,16 @@ const menuItems = [
         roles: ["ciudadano", "administrador", "supervisor", "funcionario"] 
     },
     { 
+        title: "Peticiones", 
+        icon: FileText, 
+        route: "/petitions", 
+        roles: ["ciudadano", "supervisor", "funcionario"] 
+    },
+    { 
         title: "Periodos", 
         icon: CalendarRange, 
         route: "/periods", 
         roles: ["funcionario"] 
-    },
-    { 
-        title: "Solicitudes", 
-        icon: MessageSquareText, 
-        route: "/requests", 
-        roles: ["ciudadano", "funcionario"] 
-    },
-    { 
-        title: "Peticiones", 
-        icon: GraduationCap, 
-        route: "/petitions", 
-        roles: ["ciudadano", "supervisor", "funcionario"] 
     },
     { 
         title: "Usuarios", 
@@ -51,6 +44,12 @@ const menuItems = [
         roles: ["ciudadano"] 
     },
     { 
+        title: "Solicitudes", 
+        icon: MessageSquareText, 
+        route: "/requests", 
+        roles: ["ciudadano", "funcionario"] 
+    },
+    { 
         title: "Gestión Inscripciones", 
         icon: FilePenLine, 
         route: "/appointments", 
@@ -59,7 +58,9 @@ const menuItems = [
 ];
 
 export function Navbar() {
-    const location = useLocation().pathname;
+    const location = useLocation();
+    const currentPath = location.pathname;
+    const currentRouteWithSearch = `${location.pathname}${location.search}`;
     const { user } = useAuth();
 
     const roleText = {
@@ -70,10 +71,34 @@ export function Navbar() {
     };
 
     let RoleIcon;
-    if (user.role === "administrador") RoleIcon = Bolt;
-    if (user.role === "ciudadano") RoleIcon = GraduationCap;
-    if (user.role === "supervisor") RoleIcon = IdCardLanyard;
-    if (user.role === "funcionario") RoleIcon = UserCog;
+    if (user.role === "administrador") RoleIcon = KeyRound;
+    if (user.role === "ciudadano") RoleIcon = KeyRound;
+    if (user.role === "supervisor") RoleIcon = KeyRound;
+    if (user.role === "funcionario") RoleIcon = KeyRound;
+
+    const visibleMenuItems = menuItems.flatMap((item) => {
+        const isSupervisorAppointmentsMenu =
+            item.route === "/appointments" &&
+            Array.isArray(item.roles) &&
+            item.roles.length === 1 &&
+            item.roles[0] === "supervisor";
+
+        if (!isSupervisorAppointmentsMenu) return [item];
+
+        return [
+            {
+                ...item,
+                title: "Pendientes",
+                icon: FileSearchCorner,
+                route: "/appointments?view=pending",
+            },
+            {
+                ...item,
+                title: "Mis revisiones",
+                route: "/appointments?view=reviews",
+            },
+        ];
+    });
 
     return (
         <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-blue-600">
@@ -92,11 +117,13 @@ export function Navbar() {
 
                 {/* Menú */}
                 <nav className="flex items-center gap-1">
-                    {menuItems.map((item) => {
+                    {visibleMenuItems.map((item) => {
                         if (!item.roles.includes(user.role)) return null;
 
                         const Icon = item.icon;
-                        const isActive = location === item.route;
+                        const isActive = item.route.includes("?")
+                            ? currentRouteWithSearch === item.route
+                            : currentPath === item.route;
 
                         return (
                             <NavLink

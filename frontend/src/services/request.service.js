@@ -19,6 +19,25 @@ export async function getRequests() {
     }
 }
 
+// Obtener cupo global de renovacion
+export async function getRenewalQuota() {
+    try {
+        const response = await axios.get("/requests/renewal-quota");
+
+        return {
+            success: true,
+            data: response.data.data,
+            message: response.data.message,
+        };
+    } catch (error) {
+        console.error("Error en getRenewalQuota():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "Error al obtener cupos de renovacion",
+        };
+    }
+}
+
 // Obtener solicitud por ID
 export async function getRequestById(id) {
     try {
@@ -52,6 +71,25 @@ export async function createRequest(data) {
         return {
             success: false,
             message: error.response?.data?.message || "No se pudo crear la solicitud",
+        };
+    }
+}
+
+// Cancelar solicitud pendiente (ciudadano)
+export async function cancelOwnRequest(id) {
+    try {
+        const response = await axios.delete(`/requests/${id}`);
+
+        return {
+            success: true,
+            data: response.data.data,
+            message: response.data.message || "Solicitud cancelada correctamente",
+        };
+    } catch (error) {
+        console.error("Error en cancelOwnRequest():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudo cancelar la solicitud",
         };
     }
 }

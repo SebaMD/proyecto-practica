@@ -1,7 +1,7 @@
 import { useAuth } from "@context/AuthContext";
 import { Navbar } from "@components/Navbar";
 import {
-    GraduationCap,
+    FileText,
     IdCard,
     Mail,
     User,
@@ -115,7 +115,7 @@ const Profile = () => {
 
                             {(isSupervisor || isFuncionario) && (
                             <InfoItem
-                                icon={GraduationCap}
+                                icon={FileText}
                                 label="Peticiones gestionadas"
                                 value={
                                     loading
@@ -152,3 +152,4 @@ const InfoItem = ({ icon, label, value }) => {
 
 
 export default Profile;
+

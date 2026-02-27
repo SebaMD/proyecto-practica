@@ -52,6 +52,14 @@ const Period = () => {
             return new Date(date.getTime() - offset).toISOString().slice(0, 16);
         };
 
+        const getLocalDateTimeMin = () => {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            return new Date(now.getTime() - offset).toISOString().slice(0, 16);
+        };
+
+        const minDateTime = getLocalDateTimeMin();
+
         const result = await Swal.fire({
             title: isEdit ? "Editar periodo" : "Crear periodo",
             html: `
@@ -62,12 +70,12 @@ const Period = () => {
                 </div>
                 <div>
                     <label class="text-sm font-medium">Fecha inicio</label>
-                    <input type="datetime-local" id="startDate" class="swal2-input m-0"
+                    <input type="datetime-local" id="startDate" class="swal2-input m-0" min="${minDateTime}"
                     value="${toInputDate(period?.startDate)}">
                 </div>
                 <div>
                     <label class="text-sm font-medium">Fecha término</label>
-                    <input type="datetime-local" id="closingDate" class="swal2-input m-0"
+                    <input type="datetime-local" id="closingDate" class="swal2-input m-0" min="${minDateTime}"
                     value="${toInputDate(period?.closingDate)}">
                 </div>
                 </div>
@@ -82,6 +90,16 @@ const Period = () => {
 
                 if (!name || !startDate || !closingDate) {
                     Swal.showValidationMessage("Todos los campos son obligatorios");
+                    return false;
+                }
+
+                if (new Date(startDate) < new Date(minDateTime)) {
+                    Swal.showValidationMessage("La fecha de inicio no puede ser anterior a la actual");
+                    return false;
+                }
+
+                if (new Date(closingDate) < new Date(minDateTime)) {
+                    Swal.showValidationMessage("La fecha de tÃ©rmino no puede ser anterior a la actual");
                     return false;
                 }
 

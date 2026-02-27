@@ -9,7 +9,8 @@ import HomeCard from "@components/HomeCard";
 import {
     CalendarRange,
     FilePenLine,
-    GraduationCap,
+    FileText,
+    FileSearchCorner,
     MessageSquareText,
     Users,
 } from "lucide-react";
@@ -33,6 +34,8 @@ const Home = () => {
 
     const [petitionCounter, setPetitionCounter] = useState(0);
     const [appointmentCounter, setAppointmentCounter] = useState(0);
+    const [supervisorPendingCounter, setSupervisorPendingCounter] = useState(0);
+    const [supervisorReviewedCounter, setSupervisorReviewedCounter] = useState(0);
     const [requestCounter, setRequestCounter] = useState(0);
     const [userCounter, setUserCounter] = useState(0);
 
@@ -48,7 +51,7 @@ const Home = () => {
 
             if (isCiudadano || isSupervisor) tasks.push(getAppointments());
             if (isCiudadano || isFuncionario) tasks.push(getRequests());
-            if (isFuncionario || isCiudadano) tasks.push(getActivePeriod());
+            if (isFuncionario || isCiudadano || isSupervisor) tasks.push(getActivePeriod());
             if (isAdmin) tasks.push(getUsers());
 
             const results = await Promise.all(tasks);
@@ -65,7 +68,21 @@ const Home = () => {
             if (isCiudadano || isSupervisor) {
                 const appointmentsResult = results[idx++];
                 if (appointmentsResult?.success) {
-                    setAppointmentCounter(appointmentsResult.data?.length || 0);
+                    const appointmentsData = appointmentsResult.data || [];
+                    setAppointmentCounter(appointmentsData.length || 0);
+
+                    if (isSupervisor) {
+                        setSupervisorPendingCounter(
+                            appointmentsData.filter((a) => a.status === "pendiente").length
+                        );
+                        setSupervisorReviewedCounter(
+                            appointmentsData.filter(
+                                (a) =>
+                                    Number(a.supervisorId) === Number(user.id) &&
+                                    (a.status === "aprobado" || a.status === "rechazado")
+                            ).length
+                        );
+                    }
                 }
             }
 
@@ -76,7 +93,7 @@ const Home = () => {
                 }
             }
 
-            if (isFuncionario || isCiudadano) {
+            if (isFuncionario || isCiudadano || isSupervisor) {
                 const activePeriodResult = results[idx++];
                 setActivePeriod(activePeriodResult || null);
             }
@@ -129,13 +146,55 @@ const Home = () => {
         <div className="min-h-screen bg-gray-100">
             <Navbar />
 
-            <div className="pt-20 p-4 flex flex-col">
-                <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
-                    <div>
-                        <h1 className="font-bold text-2xl">Inicio</h1>
-                        <p className="text-gray-600">{getDescriptionText()}</p>
-                    </div>
+            <div className="pt-20 p-4 flex flex-col gap-4">
+                <section className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-white min-h-[345px]">
 
+                    <div
+                        className="absolute inset-0 bg-cover bg-center"
+                        style={{ backgroundImage: "url('/municipalidad--santa-juana.jpg')" }}
+                    />
+                    <div className="absolute inset-0 bg-blue-900/35" />
+
+                    <div className="relative z-10 h-full p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div className="flex items-start gap-4">
+                            <div className="h-20 w-20 md:h-24 md:w-24 flex items-center justify-center p-2">
+                                <img
+                                    src="/logo-escudo.png"
+                                    alt="Escudo Municipalidad"
+                                    className="h-full w-full object-contain drop-shadow-md"
+                                />
+                            </div>
+
+                            <div className="text-white">
+                                <p className="text-xs md:text-sm uppercase tracking-wide text-blue-100/90 font-semibold">
+                                    Inicio
+                                </p>
+                                <p className="text-sm md:text-base text-blue-100 font-medium">
+                                    Portal de atencion ciudadana
+                                </p>
+                                <h2 className="text-xl md:text-3xl font-bold leading-tight">
+                                    Gestion de horas para licencia de conducir
+                                </h2>
+                                <p className="text-sm md:text-base text-blue-100 mt-2 max-w-2xl">
+                                    {getDescriptionText()}
+                                </p>
+                                <p className="text-xs md:text-sm text-blue-100/90 mt-1 max-w-2xl">
+                                    {getSummaryText()}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="px-4 py-3 min-w-[220px] flex items-center justify-center">
+                            <img
+                                src="/logo-municipalidad.png"
+                                alt="Logo Municipalidad de Santa Juana"
+                                className="max-h-24 md:max-h-28 w-auto object-contain drop-shadow-md"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
                     {loading ? (
                         <div className="flex justify-center p-4">
                         <Badge text="Cargando..." />
@@ -148,7 +207,7 @@ const Home = () => {
                                 <p className="text-gray-500">Información relevante para tu rol</p>
                             </div>
 
-                            {(isFuncionario || isCiudadano) ? (
+                            {(isFuncionario || isCiudadano || isSupervisor) ? (
                                 <div className="w-full rounded-lg bg-blue-100/70 p-4">
                                     {activePeriod ? (
                                     <>
@@ -184,15 +243,7 @@ const Home = () => {
                             {isCiudadano && (
                             <>
                                 <HomeCard
-                                icon={MessageSquareText}
-                                counter={requestCounter}
-                                text={requestCounter === 1 ? "solicitud registrada" : "solicitudes registradas"}
-                                color="sky"
-                                btnText="Ir a solicitudes"
-                                onClick={() => navigate("/requests")}
-                                />
-                                <HomeCard
-                                icon={GraduationCap}
+                                icon={FileText}
                                 counter={petitionCounter}
                                 text={petitionCounter === 1 ? "petición disponible" : "peticiones disponibles"}
                                 color="blue"
@@ -204,8 +255,16 @@ const Home = () => {
                                 counter={appointmentCounter}
                                 text={appointmentCounter === 1 ? "inscripción registrada" : "inscripciones registradas"}
                                 color="purple"
-                                btnText="Ir a inscripciones"
+                                btnText="Ir a mis inscripciones"
                                 onClick={() => navigate("/appointments")}
+                                />
+                                <HomeCard
+                                icon={MessageSquareText}
+                                counter={requestCounter}
+                                text={requestCounter === 1 ? "solicitud registrada" : "solicitudes registradas"}
+                                color="sky"
+                                btnText="Ir a solicitudes"
+                                onClick={() => navigate("/requests")}
                                 />
                             </>
                             )}
@@ -213,7 +272,7 @@ const Home = () => {
                             {isSupervisor && (
                             <>
                                 <HomeCard
-                                icon={GraduationCap}
+                                icon={FileText}
                                 counter={petitionCounter}
                                 text={petitionCounter === 1 ? "petición asignada" : "peticiones asignadas"}
                                 color="blue"
@@ -221,18 +280,34 @@ const Home = () => {
                                 onClick={() => navigate("/petitions")}
                                 />
                                 <HomeCard
-                                icon={FilePenLine}
-                                counter={appointmentCounter}
-                                text={appointmentCounter === 1 ? "inscripción por revisar" : "inscripciones por revisar"}
+                                icon={FileSearchCorner}
+                                counter={supervisorPendingCounter}
+                                text={supervisorPendingCounter === 1 ? "pendiente por revisar" : "pendientes por revisar"}
                                 color="purple"
-                                btnText="Ir a inscripciones"
-                                onClick={() => navigate("/appointments")}
+                                btnText="Ir a pendientes"
+                                onClick={() => navigate("/appointments?view=pending")}
+                                />
+                                <HomeCard
+                                icon={FilePenLine}
+                                counter={supervisorReviewedCounter}
+                                text={supervisorReviewedCounter === 1 ? "revision realizada" : "mis revisiones"}
+                                color="sky"
+                                btnText="Ir a mis revisiones"
+                                onClick={() => navigate("/appointments?view=reviews")}
                                 />
                             </>
                             )}
 
                             {isFuncionario && (
                             <>
+                                <HomeCard
+                                icon={FileText}
+                                counter={petitionCounter}
+                                text={petitionCounter === 1 ? "petición disponible" : "peticiones disponibles"}
+                                color="purple"
+                                btnText="Ir a peticiones"
+                                onClick={() => navigate("/petitions")}
+                                />
                                 <HomeCard
                                 icon={CalendarRange}
                                 counter={activePeriod ? 1 : 0}
@@ -248,14 +323,6 @@ const Home = () => {
                                 color="blue"
                                 btnText="Ir a solicitudes"
                                 onClick={() => navigate("/requests")}
-                                />
-                                <HomeCard
-                                icon={GraduationCap}
-                                counter={petitionCounter}
-                                text={petitionCounter === 1 ? "petición disponible" : "peticiones disponibles"}
-                                color="purple"
-                                btnText="Ir a peticiones"
-                                onClick={() => navigate("/petitions")}
                                 />
                             </>
                             )}
@@ -281,4 +348,10 @@ const Home = () => {
 };
 
 export default Home;
+
+
+
+
+
+
 

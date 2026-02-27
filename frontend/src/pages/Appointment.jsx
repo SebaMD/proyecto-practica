@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@context/AuthContext";
 import { getAppointments } from "@services/appointment.service";
 import { showErrorAlert } from "@helpers/sweetAlert";
@@ -16,6 +17,8 @@ const Appointments = () => {
     const [showRejected, setShowRejected] = useState(true);
 
     const { user } = useAuth();
+    const [searchParams] = useSearchParams();
+    const supervisorView = searchParams.get("view"); // pending | reviews | null
 
     const isCitizen = user.role === "ciudadano";
     const isSupervisor = user.role === "supervisor";
@@ -24,9 +27,15 @@ const Appointments = () => {
 
     const myReviewedAppointments = appointments.filter(
         (a) =>
-            a.supervisorId === user.id &&
+            Number(a.supervisorId) === Number(user.id) &&
             (a.status === "aprobado" || a.status === "rechazado")
     );
+
+    const showSupervisorPendingSection = !isSupervisor || supervisorView !== "reviews";
+    const showSupervisorReviewsSection = !isSupervisor || supervisorView !== "pending";
+    const showPendingBadge = !isSupervisor || supervisorView !== "reviews";
+    const showApprovedBadge = !isSupervisor || supervisorView !== "pending";
+    const showRejectedBadge = !isSupervisor || supervisorView !== "pending";
 
     const pendingCount = appointments.filter(a => a.status === "pendiente").length;
     const approvedCount = appointments.filter(a => a.status === "aprobado").length;
@@ -78,7 +87,7 @@ const Appointments = () => {
 
                     {/* BADGES */}
                     <div className="flex gap-4">
-                        {pendingCount > 0 && (
+                        {showPendingBadge && pendingCount > 0 && (
                         <Badge
                             type="pending"
                             text={`${pendingCount} pendientes`}
@@ -87,7 +96,7 @@ const Appointments = () => {
                             canToggleActive
                         />
                         )}
-                        {approvedCount > 0 && (
+                        {showApprovedBadge && approvedCount > 0 && (
                         <Badge
                             type="success"
                             text={`${approvedCount} aprobadas`}
@@ -96,7 +105,7 @@ const Appointments = () => {
                             canToggleActive
                         />
                         )}
-                        {rejectedCount > 0 && (
+                        {showRejectedBadge && rejectedCount > 0 && (
                         <Badge
                             type="error"
                             text={`${rejectedCount} rechazadas`}
@@ -156,6 +165,7 @@ const Appointments = () => {
                             {/* LISTADO SUPERVISOR */}
                             {!loading && appointments.length > 0 && isSupervisor && (
                                 <div className="flex flex-col gap-6">
+                                    {showSupervisorPendingSection && (
                                     <div className="border rounded-lg p-4 bg-gray-50">
                                         <h2 className="font-semibold text-lg mb-3">Pendientes por revisar</h2>
 
@@ -180,7 +190,9 @@ const Appointments = () => {
                                             </div>
                                         )}
                                     </div>
+                                    )}
 
+                                    {showSupervisorReviewsSection && (
                                     <div className="border rounded-lg p-4 bg-white">
                                         <h2 className="font-semibold text-lg mb-3">Mis revisiones</h2>
 
@@ -216,6 +228,7 @@ const Appointments = () => {
                                             </div>
                                         )}
                                     </div>
+                                    )}
                                 </div>
                             )}
                         </div>
