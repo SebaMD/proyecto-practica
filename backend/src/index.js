@@ -2,7 +2,8 @@ import "dotenv/config";
 import express from "express";
 import morgan from "morgan";
 import cors from "cors";
-
+import { Server } from "socket.io";
+import { initSocket } from "./socket.js";
 import { connectDb } from "./config/configDb.js";
 import { routerApi } from "./routes/index.routes.js";
 import { createInitialPetitions, createInitialPeriod, createInitialUsers } from "./config/initDb.js";
@@ -10,6 +11,15 @@ import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: true,
+        credentials: true,
+    },
+});
+
+initSocket(io);
 
 app.use(express.json());
 app.use(morgan("dev"));
