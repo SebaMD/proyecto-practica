@@ -7,9 +7,10 @@ import {
     getPetitionSchedules,
     createPetitionSchedule,
 } from "@services/petitionSchedule.service";
-import { createAppointment } from "@services/appointment.service";
+import { createAppointment, getAppointments } from "@services/appointment.service";
 import { getActivePeriod } from "@services/period.service";
 import { showErrorAlert } from "@helpers/sweetAlert";
+import socket from "@services/socket.service";
 
 const PREDEFINED_SLOTS = [
     ["08:00", "08:30"],
@@ -26,7 +27,13 @@ const PREDEFINED_SLOTS = [
 
 const slotKey = (startTime, endTime) => `${startTime}-${endTime}`;
 
-export function PetitionSchedule({ petitionId, onSelect = null }) {
+export function PetitionSchedule({
+    petitionId,
+    onSelect = null,
+    preferredDate = null,
+    globalDateQuotaMap = {},
+    onDateChange = null,
+}) {
     const { user } = useAuth();
     const isFuncionario = user.role === "funcionario";
     const isCiudadano = user.role === "ciudadano";
@@ -38,8 +45,10 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
     const [taking, setTaking] = useState(false);
     const [schedules, setSchedules] = useState([]);
     const [allSchedules, setAllSchedules] = useState([]);
+    const [citizenAppointments, setCitizenAppointments] = useState([]);
     const [selectedKeys, setSelectedKeys] = useState([]);
     const [activePeriod, setActivePeriod] = useState(null);
+    const isFilteredByParentDate = Boolean(preferredDate);
 
     const existingKeys = useMemo(
         () => new Set(schedules.map((s) => slotKey(s.startTime.slice(0, 5), s.endTime.slice(0, 5)))),
@@ -51,12 +60,39 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
         [allSchedules]
     );
 
+    const dateCards = useMemo(() => {
+        return availableDates.map((dateValue) => {
+            const dayItems = allSchedules.filter((s) => s.date === dateValue);
+            const available = dayItems.filter((s) => s.status === "disponible").length;
+            const pending = dayItems.filter((s) => s.status === "pendiente").length;
+            const taken = dayItems.filter((s) => s.status === "tomada").length;
+
+            return {
+                date: dateValue,
+                total: dayItems.length,
+                available,
+                pending,
+                taken,
+            };
+        });
+    }, [allSchedules, availableDates]);
+
     const schedulesForSelectedDate = useMemo(() => {
         if (!selectedDate) return [];
         return allSchedules
             .filter((s) => s.date === selectedDate)
             .sort((a, b) => a.startTime.localeCompare(b.startTime));
     }, [allSchedules, selectedDate]);
+
+    const selectedDateGlobalQuota = useMemo(() => {
+        if (!selectedDate) return null;
+        return globalDateQuotaMap?.[selectedDate] || null;
+    }, [globalDateQuotaMap, selectedDate]);
+
+    useEffect(() => {
+        if (!petitionId || !selectedDate || typeof onDateChange !== "function") return;
+        onDateChange(selectedDate);
+    }, [petitionId, selectedDate, onDateChange]);
 
     const fetchSchedulesByDate = async () => {
         if (!petitionId || !date) return;
@@ -92,9 +128,15 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
                 setAllSchedules(data);
 
                 setSelectedDate((prev) => {
+                    const dates = [...new Set(data.map((s) => s.date))].sort();
+
+                    if (preferredDate && dates.includes(preferredDate)) {
+                        return preferredDate;
+                    }
+
                     if (prev && data.some((s) => s.date === prev)) return prev;
-                    const firstDate = [...new Set(data.map((s) => s.date))].sort()[0] || null;
-                    return firstDate;
+
+                    return dates[0] || null;
                 });
             } else {
                 setAllSchedules([]);
@@ -115,6 +157,16 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
         setActivePeriod(period || null);
     };
 
+    const fetchCitizenAppointments = async () => {
+        if (!isCiudadano) return;
+        const result = await getAppointments();
+        if (!result.success) {
+            setCitizenAppointments([]);
+            return;
+        }
+        setCitizenAppointments(result.data || []);
+    };
+
     useEffect(() => {
         if (isFuncionario) {
             fetchSchedulesByDate();
@@ -122,8 +174,29 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
         }
         fetchAllSchedules();
         fetchCitizenPeriod();
+        fetchCitizenAppointments();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [petitionId, date, isFuncionario]);
+    }, [petitionId, date, isFuncionario, preferredDate]);
+
+    useEffect(() => {
+        const handleScheduleUpdated = (payload) => {
+            if (!payload || Number(payload.petitionId) !== Number(petitionId)) return;
+
+            if (isFuncionario) {
+                fetchSchedulesByDate();
+            } else {
+                fetchAllSchedules();
+                fetchCitizenAppointments();
+            }
+        };
+
+        socket.on("schedule:updated", handleScheduleUpdated);
+
+        return () => {
+            socket.off("schedule:updated", handleScheduleUpdated);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [petitionId, isFuncionario, date]);
 
     const toggleSlot = (startTime, endTime) => {
         const key = slotKey(startTime, endTime);
@@ -249,10 +322,98 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
         return "error";
     };
 
+    const timeToMinutes = (time) => {
+        const [hour = 0, minute = 0] = String(time || "00:00").split(":").map(Number);
+        return (hour * 60) + minute;
+    };
+
+    const hasCitizenTimeConflict = (schedule) => {
+        if (!isCiudadano || !schedule) return false;
+
+        const nextStart = timeToMinutes(schedule.startTime);
+        const nextEnd = timeToMinutes(schedule.endTime);
+
+        return citizenAppointments.some((appointment) => {
+            if (!appointment || !["pendiente", "aprobado"].includes(appointment.status)) return false;
+
+            const existingSchedule = appointment.schedule;
+            if (!existingSchedule) return false;
+            if (existingSchedule.date !== schedule.date) return false;
+
+            const existingStart = timeToMinutes(existingSchedule.startTime);
+            const existingEnd = timeToMinutes(existingSchedule.endTime);
+
+            return nextStart < existingEnd && existingStart < nextEnd;
+        });
+    };
+
+    const isCitizenOwnerOfPendingSlot = (schedule) => {
+        if (!isCiudadano || !schedule) return false;
+
+        return citizenAppointments.some((appointment) => {
+            if (!appointment || appointment.status !== "pendiente") return false;
+            const existingSchedule = appointment.schedule;
+            if (!existingSchedule) return false;
+            const sameDateTime =
+                existingSchedule.date === schedule.date &&
+                String(existingSchedule.startTime).slice(0, 5) === String(schedule.startTime).slice(0, 5) &&
+                String(existingSchedule.endTime).slice(0, 5) === String(schedule.endTime).slice(0, 5);
+
+            if (!sameDateTime) return false;
+
+            // Amarillo solo en la peticion que realmente tomo el ciudadano.
+            return Number(appointment.petitionId) === Number(schedule.petitionId);
+        });
+    };
+
+    const isCitizenPendingSameSlotInAnotherPetition = (schedule) => {
+        if (!isCiudadano || !schedule) return false;
+
+        return citizenAppointments.some((appointment) => {
+            if (!appointment || appointment.status !== "pendiente") return false;
+            const existingSchedule = appointment.schedule;
+            if (!existingSchedule) return false;
+
+            const sameDateTime =
+                existingSchedule.date === schedule.date &&
+                String(existingSchedule.startTime).slice(0, 5) === String(schedule.startTime).slice(0, 5) &&
+                String(existingSchedule.endTime).slice(0, 5) === String(schedule.endTime).slice(0, 5);
+
+            if (!sameDateTime) return false;
+
+            return Number(appointment.petitionId) !== Number(schedule.petitionId);
+        });
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return "-";
+        return new Date(`${dateString}T00:00:00`).toLocaleDateString("es-CL", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+        });
+    };
+
     return (
         <div className="border rounded-lg p-4 bg-white flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-                <h3 className="font-semibold">Horarios</h3>
+            <div className="flex justify-between items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold">
+                        {(!isFuncionario && selectedDate)
+                            ? `Horarios de ${formatDate(selectedDate)}`
+                            : "Horarios"}
+                    </h3>
+                    {!isFuncionario && isFilteredByParentDate && selectedDate && (
+                        <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-0.5">
+                            fecha filtrada
+                        </span>
+                    )}
+                </div>
+                {!isFuncionario && selectedDate && (
+                    <span className="text-xs text-gray-500">
+                        {schedulesForSelectedDate.length} horario(s)
+                    </span>
+                )}
                 {isFuncionario && (
                     <button
                         onClick={saveSelectedSlots}
@@ -310,19 +471,6 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
                 </>
             )}
 
-            {!isFuncionario && isCiudadano && (
-                <div className={`rounded-md border p-3 ${activePeriod ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
-                    <p className="text-sm font-medium">
-                        {activePeriod ? "Periodo activo" : "Periodo cerrado"}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                        {activePeriod
-                            ? "Puedes seleccionar una fecha y tomar una hora disponible."
-                            : "No puedes tomar horas hasta que exista un periodo activo."}
-                    </p>
-                </div>
-            )}
-
             {loading && <Badge text="Cargando..." />}
 
             {!loading && !isFuncionario && availableDates.length === 0 && (
@@ -330,72 +478,150 @@ export function PetitionSchedule({ petitionId, onSelect = null }) {
             )}
 
             {!loading && !isFuncionario && availableDates.length > 0 && (
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                        <CalendarDays className="h-4 w-4" />
-                        Fechas disponibles
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                        {availableDates.map((d) => (
-                            <button
-                                key={d}
-                                onClick={() => setSelectedDate(d)}
-                                className={`px-3 py-1.5 text-sm border rounded-md ${
-                                    selectedDate === d
-                                        ? "bg-blue-100 text-blue-700 border-blue-300"
-                                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                                }`}
-                            >
-                                {d}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="border rounded-md p-3 bg-gray-50">
-                        <p className="text-sm font-medium mb-2">Horarios de {selectedDate || "-"}</p>
-
-                        {schedulesForSelectedDate.length === 0 ? (
-                            <p className="text-sm text-gray-500 italic">No hay horarios para esta fecha.</p>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {schedulesForSelectedDate.map((s) => {
-                                    const available = s.status === "disponible";
-                                    const canTake = isCiudadano && available;
-
-                                    return (
-                                        <div key={s.id} className="border rounded-md p-2 bg-white flex items-center justify-between gap-2">
-                                            <div className="text-sm font-medium">
-                                                {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge type={getType(s.status)} text={s.status} showIcon={false} />
-
-                                                {canTake && (
-                                                    <button
-                                                        onClick={() => takeSchedule(s)}
-                                                        disabled={taking}
-                                                        className="px-2 py-1 text-xs rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-                                                    >
-                                                        Tomar hora
-                                                    </button>
-                                                )}
-
-                                                {!isCiudadano && onSelect && available && (
-                                                    <button
-                                                        onClick={() => onSelect(s)}
-                                                        className="px-2 py-1 text-xs rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50"
-                                                    >
-                                                        Seleccionar
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                <div className={isFilteredByParentDate ? "flex flex-col" : "grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4"}>
+                    {!isFilteredByParentDate && (
+                        <div className="border rounded-lg p-3 bg-gray-50">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                                <CalendarDays className="h-4 w-4" />
+                                Fechas disponibles
                             </div>
-                        )}
-                    </div>
+
+                            <div className="flex flex-col gap-2">
+                                {dateCards.map((item) => (
+                                    <button
+                                        key={item.date}
+                                        onClick={() => setSelectedDate(item.date)}
+                                        className={`w-full text-left border rounded-lg p-3 transition ${
+                                            selectedDate === item.date
+                                                ? "bg-blue-50 border-blue-300"
+                                                : "bg-white border-gray-200 hover:bg-gray-50"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-sm font-semibold text-gray-900">
+                                                {formatDate(item.date)}
+                                            </p>
+                                        <span className="text-xs text-gray-500">
+                                            {globalDateQuotaMap?.[item.date]
+                                                ? `${globalDateQuotaMap[item.date].available}/${globalDateQuotaMap[item.date].max}`
+                                                : `${item.available} cupo(s)`}
+                                        </span>
+                                    </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {item.available > 0 && (
+                                                <span className="text-[11px] px-2 py-0.5 rounded bg-green-100 text-green-700">
+                                                    {item.available} disponibles
+                                                </span>
+                                            )}
+                                            {item.pending > 0 && (
+                                                <span className="text-[11px] px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">
+                                                    {item.pending} pendientes
+                                                </span>
+                                            )}
+                                            {item.taken > 0 && (
+                                                <span className="text-[11px] px-2 py-0.5 rounded bg-red-100 text-red-700">
+                                                    {item.taken} tomadas
+                                                </span>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {schedulesForSelectedDate.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">No hay horarios para esta fecha.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {schedulesForSelectedDate.map((s) => {
+                                const available = s.status === "disponible";
+                                const hasConflict = hasCitizenTimeConflict(s);
+                                const isMyPendingSlot = s.status === "pendiente" && isCitizenOwnerOfPendingSlot(s);
+                                const isMyPendingSameSlotInOtherPetition =
+                                    s.status === "pendiente" && isCitizenPendingSameSlotInAnotherPetition(s);
+                                const isOtherCitizenPendingSlot = isCiudadano && s.status === "pendiente" && !isMyPendingSlot;
+                                const isBlockedByDateQuota =
+                                    isCiudadano &&
+                                    available &&
+                                    Number.isFinite(selectedDateGlobalQuota?.available) &&
+                                    selectedDateGlobalQuota.available <= 0;
+                                const canTake = isCiudadano && available && !hasConflict && !isBlockedByDateQuota;
+                                const badgeType = isBlockedByDateQuota
+                                    ? "error"
+                                    : isOtherCitizenPendingSlot
+                                        ? "error"
+                                        : getType(s.status);
+                                const badgeText = isBlockedByDateQuota ? "sin cupo fecha" : s.status;
+
+                                return (
+                                    <div key={s.id} className="border rounded-lg p-3 bg-gray-50 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-sm font-semibold text-gray-900">
+                                                {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                                            </p>
+                                            <Badge type={badgeType} text={badgeText} showIcon={false} />
+                                        </div>
+
+                                        <div className="flex justify-end">
+                                            {isCiudadano && isBlockedByDateQuota && (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    title="No hay cupos disponibles para esta fecha"
+                                                    className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
+                                                >
+                                                    Cupo fecha lleno
+                                                </button>
+                                            )}
+
+                                            {isCiudadano && available && hasConflict && (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    title="Ya tienes una hora en ese horario para la misma fecha"
+                                                    className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
+                                                >
+                                                    Hora tomada
+                                                </button>
+                                            )}
+
+                                            {isCiudadano && isMyPendingSameSlotInOtherPetition && (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    title="Esta misma hora ya la tomaste en otra peticion"
+                                                    className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
+                                                >
+                                                    Reservada
+                                                </button>
+                                            )}
+
+                                            {canTake && (
+                                                <button
+                                                    onClick={() => takeSchedule(s)}
+                                                    disabled={taking}
+                                                    className="px-2 py-1 text-xs rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                                                >
+                                                    Tomar hora
+                                                </button>
+                                            )}
+
+                                            {!isCiudadano && onSelect && available && (
+                                                <button
+                                                    onClick={() => onSelect(s)}
+                                                    className="px-2 py-1 text-xs rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50"
+                                                >
+                                                    Seleccionar
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
