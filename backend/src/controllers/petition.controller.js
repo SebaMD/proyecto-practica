@@ -10,6 +10,7 @@ import {
     getPetitionsService,
     updatePetitionService 
 } from "../services/petition.service.js";
+import { checkActivePeriodService } from "../services/period.service.js";
 
 export async function getAllPetitions(req, res) {
     try {
@@ -46,6 +47,15 @@ export async function createPetition(req, res) {
             return handleErrorClient(res, 403, "Solo los funcionarios pueden crear peticiones.");
         }
 
+        const activePeriod = await checkActivePeriodService();
+            if (activePeriod) {
+                return handleErrorClient(
+                    res,
+                    409,
+                    "No se pueden modificar peticiones mientras hay un período activo."
+                );
+            }
+
         const { error, value } = petitionBodyValidation.validate(req.body, {
             abortEarly: false,
             stripUnknown: true
@@ -70,6 +80,20 @@ export async function createPetition(req, res) {
 
 export async function updatePetition(req, res) {
     try {
+
+        if (req.user.role !== "funcionario") {
+            return handleErrorClient(res, 403, "Solo los funcionarios pueden actualizar peticiones.");
+        }
+
+        const activePeriod = await checkActivePeriodService();
+        if (activePeriod) {
+            return handleErrorClient(
+                res,
+                409,
+                "No se pueden modificar peticiones mientras hay un período activo."
+            );
+        }
+
         const { id } = req.params;
 
         const updateSchema = petitionBodyValidation.fork(
@@ -107,6 +131,15 @@ export async function deletePetition(req, res) {
     try {
         if (req.user.role !== "funcionario") {
             return handleErrorClient(res, 403, "Solo los funcionarios pueden eliminar peticiones.");
+        }
+
+        const activePeriod = await checkActivePeriodService();
+        if (activePeriod) {
+            return handleErrorClient(
+                res,
+                409,
+                "No se pueden modificar peticiones mientras hay un período activo."
+            );
         }
 
         const petition = await deletePetitionService(req.params.id);
