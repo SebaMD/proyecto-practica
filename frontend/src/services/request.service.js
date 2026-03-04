@@ -19,21 +19,40 @@ export async function getRequests() {
     }
 }
 
-// Obtener cupo global de renovacion
-export async function getRenewalQuota() {
+// Obtener uso de solicitudes por fecha (pendiente + aprobado)
+export async function getRequestDateUsage() {
     try {
-        const response = await axios.get("/requests/renewal-quota");
-
+        const response = await axios.get("/requests/date-usage");
         return {
             success: true,
-            data: response.data.data,
+            data: response.data.data || [],
             message: response.data.message,
         };
     } catch (error) {
-        console.error("Error en getRenewalQuota():", error);
+        console.error("Error en getRequestDateUsage():", error);
         return {
             success: false,
-            message: error.response?.data?.message || "Error al obtener cupos de renovacion",
+            message: error.response?.data?.message || "Error al obtener uso por fecha",
+        };
+    }
+}
+
+export async function getPickupAvailabilityByDate(date, citizenId = null) {
+    try {
+        const response = await axios.get("/requests/pickup-availability", {
+            params: citizenId ? { date, citizenId } : { date },
+        });
+
+        return {
+            success: true,
+            data: response.data.data || [],
+            message: response.data.message,
+        };
+    } catch (error) {
+        console.error("Error en getPickupAvailabilityByDate():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "Error al obtener horarios de retiro",
         };
     }
 }
@@ -109,6 +128,44 @@ export async function reviewRequest(id, data) {
         return {
             success: false,
             message: error.response?.data?.message || "No se pudo revisar la solicitud",
+        };
+    }
+}
+
+export async function exportRequestsReport(date) {
+    try {
+        const response = await axios.get("/requests/export", {
+            params: { date },
+            responseType: "blob",
+        });
+
+        return {
+            success: true,
+            data: response.data,
+        };
+    } catch (error) {
+        console.error("Error en exportRequestsReport():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudo exportar el reporte de solicitudes",
+        };
+    }
+}
+
+export async function getRequestReportDates() {
+    try {
+        const response = await axios.get("/requests/export/dates");
+
+        return {
+            success: true,
+            data: response.data.data || [],
+            message: response.data.message,
+        };
+    } catch (error) {
+        console.error("Error en getRequestReportDates():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudieron obtener las fechas del reporte de solicitudes",
         };
     }
 }

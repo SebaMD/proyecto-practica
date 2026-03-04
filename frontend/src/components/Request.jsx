@@ -1,19 +1,16 @@
 import { showErrorAlert, showSuccessToast } from "@helpers/sweetAlert";
-import { reviewRequest, cancelOwnRequest } from "@services/request.service";
+import {
+  getPickupAvailabilityByDate,
+  reviewRequest,
+  cancelOwnRequest,
+} from "@services/request.service";
 import { getPetitionById } from "@services/petition.service";
+import socket from "@services/socket.service";
 import { useAuth } from "@context/AuthContext";
 import { Badge } from "@components/Badge";
 import { Calendar, CalendarCheck, Eye, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
-
-const getTodayLocalDate = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
 
 export function Request({ request, isCompact = false, fetchCallback = null }) {
   const [loading, setLoading] = useState(false);
@@ -111,7 +108,9 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
 
   if (isCiudadano) {
     return (
-      <div className="relative border border-gray-300 px-6 py-4 rounded-md bg-white pr-16">
+      <div
+        className="relative border border-gray-300 px-6 py-4 rounded-md bg-white pr-16 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+      >
         <div>
           <div className="flex flex-row gap-4 items-center mb-2">
             <span className="font-semibold text-lg">{petition.name}</span>
@@ -144,7 +143,7 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
           )}
 
           {request.rejectReason && (
-            <div className="mt-2 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
+            <div className="mt-2 inline-flex w-fit items-center gap-1 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
               <strong>Motivo rechazo:</strong> {request.rejectReason}
             </div>
           )}
@@ -170,6 +169,7 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
               <Trash2 className="h-4 w-4" />
             </button>
           )}
+
         </div>
       </div>
     );
@@ -209,8 +209,10 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
 async function requestDetailsDialog(request, petition, canReview) {
   const citizenData = request?.citizen ||
     (typeof request?.citizenId === "object" && request?.citizenId !== null ? request.citizenId : null);
+  const canApproveWithSchedule = canReview && request.status === "pendiente";
+  const defaultPickupDate = request?.requestDate || new Date().toISOString().slice(0, 10);
 
-  const { value } = await Swal.fire({
+  const detailResult = await Swal.fire({
     title: "Detalle de solicitud",
     width: 760,
     html: `
@@ -233,6 +235,7 @@ async function requestDetailsDialog(request, petition, canReview) {
         <div class="border rounded-lg p-3 bg-gray-50">
           <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Solicitud</p>
           <p class="text-sm text-gray-700"><strong>Motivo:</strong> ${request.description || "-"}</p>
+          <p class="text-sm text-gray-700 mt-1"><strong>Fecha solicitada:</strong> ${request.requestDate || "-"}</p>
           <p class="text-sm text-gray-700 mt-1"><strong>Creada:</strong> ${new Date(request.createdAt).toLocaleString()}</p>
           <p class="text-sm text-gray-700 mt-1"><strong>Estado:</strong> ${request.status}</p>
           ${
@@ -256,50 +259,14 @@ async function requestDetailsDialog(request, petition, canReview) {
             `
             : ""
         }
-        ${
-          canReview && request.status === "pendiente"
-            ? `
-              <div class="border rounded-lg p-3">
-                <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Programar retiro</p>
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-sm font-medium text-gray-700">Fecha retiro</label>
-                    <input id="pickupDate" type="date" min="${getTodayLocalDate()}" class="swal2-input" style="width:100%; margin:6px 0 0 0;" />
-                  </div>
-                  <div>
-                    <label class="text-sm font-medium text-gray-700">Hora retiro</label>
-                    <input id="pickupTime" type="time" class="swal2-input" style="width:100%; margin:6px 0 0 0;" />
-                  </div>
-                </div>
-              </div>
-            `
-            : ""
-        }
       </div>
     `,
     showConfirmButton: canReview && request.status === "pendiente",
-    confirmButtonText: "Aprobar",
+    confirmButtonText: "Asignar hora",
     showDenyButton: canReview && request.status === "pendiente",
     denyButtonText: "Rechazar",
     showCancelButton: true,
     cancelButtonText: "Cerrar",
-    preConfirm: () => {
-      if (!(canReview && request.status === "pendiente")) return { status: "aprobado" };
-
-      const pickupDate = document.getElementById("pickupDate")?.value?.trim();
-      const pickupTime = document.getElementById("pickupTime")?.value?.trim();
-
-      if (!pickupDate) {
-        Swal.showValidationMessage("La fecha de retiro es obligatoria");
-        return false;
-      }
-      if (!pickupTime) {
-        Swal.showValidationMessage("La hora de retiro es obligatoria");
-        return false;
-      }
-
-      return { status: "aprobado", pickupDate, pickupTime };
-    },
     preDeny: async () => {
       const rejectReason = await reviewCommentDialog();
       if (!rejectReason) return false;
@@ -307,7 +274,156 @@ async function requestDetailsDialog(request, petition, canReview) {
     },
   });
 
-  return value || null;
+  if (detailResult.isDenied && detailResult.value) {
+    return detailResult.value;
+  }
+
+  if (!detailResult.isConfirmed) return null;
+  if (!canApproveWithSchedule) return null;
+
+  const assignResult = await Swal.fire({
+    title: "Asignar hora",
+    width: 760,
+    html: `
+      <div class="text-left flex flex-col gap-3">
+        <div class="border rounded-lg p-3 bg-gray-50">
+          <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Fecha retiro (fija)</p>
+          <input id="pickupDateSelect" type="date" value="${defaultPickupDate}" disabled class="swal2-input" style="width:100%; margin:6px 0 0 0; background:#f3f4f6;" />
+        </div>
+        <div class="border rounded-lg p-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Horarios disponibles</p>
+          <div id="pickupSlotsGrid" class="grid grid-cols-2 gap-2"></div>
+        </div>
+      </div>
+    `,
+    showConfirmButton: true,
+    confirmButtonText: "Aprobar",
+    showCancelButton: true,
+    cancelButtonText: "Volver",
+    didOpen: () => {
+      const dateSelect = document.getElementById("pickupDateSelect");
+      const grid = document.getElementById("pickupSlotsGrid");
+      if (!dateSelect || !grid) return;
+
+      Swal.getPopup().selectedPickupSlot = null;
+
+      const loadAndRenderSlots = async (dateValue) => {
+        grid.innerHTML = `<div class="col-span-2 text-sm text-gray-500">Cargando horarios...</div>`;
+        Swal.getPopup().selectedPickupSlot = null;
+
+        const citizenId =
+          typeof request?.citizenId === "object" && request?.citizenId !== null
+            ? request.citizenId.id
+            : request?.citizenId;
+
+        const result = await getPickupAvailabilityByDate(dateValue, citizenId);
+        if (!result.success) {
+          grid.innerHTML = `<div class="col-span-2 text-sm text-red-600">${result.message || "No se pudieron cargar los horarios."}</div>`;
+          return;
+        }
+
+        const slots = (result.data || []).sort((a, b) =>
+          String(a.startTime).localeCompare(String(b.startTime))
+        );
+
+        if (!slots.length) {
+          grid.innerHTML = `<div class="col-span-2 text-sm text-amber-700">No hay horarios configurados para retiro.</div>`;
+          return;
+        }
+
+        grid.innerHTML = slots.map((slot) => {
+          const start = String(slot.startTime).slice(0, 5);
+          const end = String(slot.endTime).slice(0, 5);
+          const key = `${start}|${end}`;
+          const remaining = Number(slot.slotRemaining ?? 0);
+          const capacity = Number(slot.slotCapacity ?? 2);
+          const isBlockedForCitizen = Boolean(slot.blockedForCitizen);
+          const isAvailable = remaining > 0 && !isBlockedForCitizen;
+          return `
+            <button
+              type="button"
+              class="pickup-slot-btn border rounded-md px-3 py-2 text-left text-sm flex items-center gap-2 ${isAvailable ? "bg-white hover:bg-blue-50" : isBlockedForCitizen ? "bg-amber-50 text-amber-700 border-amber-200 cursor-not-allowed" : "bg-gray-100 text-gray-400 cursor-not-allowed"}"
+              data-slot="${key}"
+              data-available="${isAvailable ? "1" : "0"}"
+              ${isAvailable ? "" : "disabled"}
+            >
+              <span class="inline-block h-4 w-4 rounded-sm border border-gray-500 shrink-0"></span>
+              <span>${start} - ${end}</span>
+              <span class="ml-auto text-xs ${isAvailable ? "text-gray-600" : isBlockedForCitizen ? "text-amber-700" : "text-red-600"}">${isBlockedForCitizen ? "Ya la tiene" : `${remaining}/${capacity}`}</span>
+            </button>
+          `;
+        }).join("");
+
+        const buttons = grid.querySelectorAll(".pickup-slot-btn[data-available='1']");
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const alreadySelected = btn.dataset.selected === "1";
+
+            buttons.forEach((node) => {
+              node.dataset.selected = "0";
+              node.classList.remove("ring-2", "ring-blue-500", "bg-blue-50");
+              const box = node.querySelector("span");
+              if (box) {
+                box.classList.remove("bg-blue-600", "border-blue-600");
+                box.classList.add("border-gray-500");
+              }
+            });
+
+            if (alreadySelected) {
+              Swal.getPopup().selectedPickupSlot = null;
+              return;
+            }
+
+            btn.dataset.selected = "1";
+            btn.classList.add("ring-2", "ring-blue-500", "bg-blue-50");
+            const box = btn.querySelector("span");
+            if (box) {
+              box.classList.remove("border-gray-500");
+              box.classList.add("bg-blue-600", "border-blue-600");
+            }
+            Swal.getPopup().selectedPickupSlot = btn.dataset.slot || null;
+          });
+        });
+      };
+
+      const onScheduleUpdated = () => {
+        const currentDate = dateSelect.value || defaultPickupDate;
+        loadAndRenderSlots(currentDate);
+      };
+
+      loadAndRenderSlots(dateSelect.value || defaultPickupDate);
+      socket.on("schedule:updated", onScheduleUpdated);
+      Swal.getPopup()._onScheduleUpdated = onScheduleUpdated;
+    },
+    willClose: () => {
+      const popup = Swal.getPopup();
+      if (popup?._onScheduleUpdated) {
+        socket.off("schedule:updated", popup._onScheduleUpdated);
+      }
+    },
+    preConfirm: () => {
+      const pickupDate = document.getElementById("pickupDateSelect")?.value?.trim();
+      if (!pickupDate) {
+        Swal.showValidationMessage("Debes seleccionar una fecha de retiro");
+        return false;
+      }
+
+      const pickupSlot = Swal.getPopup()?.selectedPickupSlot;
+      if (!pickupSlot) {
+        Swal.showValidationMessage("Debes seleccionar un horario disponible");
+        return false;
+      }
+
+      const [pickupTime] = pickupSlot.split("|");
+      return {
+        status: "aprobado",
+        pickupDate,
+        pickupTime,
+      };
+    },
+  });
+
+  return assignResult.value || null;
 }
 
 async function reviewCommentDialog() {

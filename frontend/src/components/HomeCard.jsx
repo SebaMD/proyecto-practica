@@ -23,8 +23,10 @@ function HomeCard({ icon, counter, text, color = "sky", btnText, onClick, flexOn
     const c = colorMap[color] || colorMap.sky;
 
     return (
-        <div
-            className={`flex flex-row ${flexOne ? "flex-1" : ""} gap-4 justify-between items-center px-4 py-6 border border-gray-200 rounded-lg transition-all shadow-sm hover:shadow-md ${c.border}`}
+        <button
+            type="button"
+            onClick={onClick}
+            className={`group flex flex-row ${flexOne ? "flex-1" : ""} gap-4 justify-between items-center px-4 py-6 border border-gray-200 rounded-lg transition-all duration-200 shadow-sm hover:shadow-lg hover:-translate-y-1 ${c.border} cursor-pointer text-left`}
         >
         <span className={`${c.bg} p-2.5 rounded-full`}>
             <Icon className={`${c.text} h-5 w-5`} />
@@ -35,13 +37,12 @@ function HomeCard({ icon, counter, text, color = "sky", btnText, onClick, flexOn
             <span className="text-md text-gray-500">{text}</span>
         </div>
 
-        <button
-            onClick={onClick}
-            className={`flex flex-row gap-2 ml-auto ${c.text} font-semibold text-md items-center transition-all hover:underline hover:cursor-pointer active:scale-95`}
+        <span
+            className={`flex flex-row gap-2 ml-auto ${c.text} font-semibold text-md items-center transition-all group-hover:underline`}
         >
             {btnText} <ArrowRight className="h-4 w-4 mt-0.5" />
+        </span>
         </button>
-        </div>
     );
 }
 

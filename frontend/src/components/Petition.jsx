@@ -16,9 +16,11 @@ export function Petition({
     selectLabel = "Ver horarios",
     selectBlocked = false,
     selectDanger = false,
+    selectSuccess = false,
     onBlockedSelect = null,
     hideDateBlock = false,
     hideHoursBlock = false,
+    hideQuotaBlock = false,
     quotaLabel = "Cupo fecha",
     hideMetaTags = false,
 }) {
@@ -68,7 +70,11 @@ export function Petition({
     }
 
     return (
-        <div className="border rounded-lg p-4 bg-white flex flex-col gap-3">
+        <div
+            className={`border rounded-lg p-4 bg-white flex flex-col gap-3 transition-all duration-200 ${
+                (isCiudadano || isSupervisor) ? "hover:-translate-y-1 hover:shadow-lg" : ""
+            }`}
+        >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                     <h3 className="font-semibold text-base">{petition.name}</h3>
@@ -104,14 +110,16 @@ export function Petition({
                             </div>
                         )}
 
-                        <div className="rounded-md px-3 py-2 bg-gray-50">
-                            <p className="text-[11px] uppercase font-semibold text-gray-500 mb-0.5">{quotaLabel}</p>
-                            <p className="font-medium text-gray-800">
-                                {Number.isFinite(quotaInfo?.globalAvailable) && Number.isFinite(quotaInfo?.globalMax)
-                                    ? `${quotaInfo.globalAvailable}/${quotaInfo.globalMax}`
-                                    : "-"}
-                            </p>
-                        </div>
+                        {!hideQuotaBlock && (
+                            <div className="rounded-md px-3 py-2 bg-gray-50">
+                                <p className="text-[11px] uppercase font-semibold text-gray-500 mb-0.5">{quotaLabel}</p>
+                                <p className="font-medium text-gray-800">
+                                    {Number.isFinite(quotaInfo?.globalAvailable) && Number.isFinite(quotaInfo?.globalMax)
+                                        ? `${quotaInfo.globalAvailable}/${quotaInfo.globalMax}`
+                                        : "-"}
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {!hideHoursBlock && (
@@ -183,7 +191,9 @@ export function Petition({
                     <button
                         onClick={handleSelect}
                         className={`px-3 py-1.5 text-sm border rounded-md ${
-                            (selectBlocked || selectDanger)
+                            selectSuccess
+                                ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                : (selectBlocked || selectDanger)
                                 ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                                 : "hover:bg-blue-50 text-blue-700 border-blue-200"
                         }`}

@@ -33,6 +33,7 @@ export function PetitionSchedule({
     preferredDate = null,
     globalDateQuotaMap = {},
     onDateChange = null,
+    onCloseRequested = null,
 }) {
     const { user } = useAuth();
     const isFuncionario = user.role === "funcionario";
@@ -63,7 +64,10 @@ export function PetitionSchedule({
     const dateCards = useMemo(() => {
         return availableDates.map((dateValue) => {
             const dayItems = allSchedules.filter((s) => s.date === dateValue);
-            const available = dayItems.filter((s) => s.status === "disponible").length;
+            const available = dayItems.reduce(
+                (acc, s) => acc + Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0)),
+                0
+            );
             const pending = dayItems.filter((s) => s.status === "pendiente").length;
             const taken = dayItems.filter((s) => s.status === "tomada").length;
 
@@ -198,6 +202,23 @@ export function PetitionSchedule({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [petitionId, isFuncionario, date]);
 
+    useEffect(() => {
+        const handleRequestUsageUpdated = () => {
+            if (isFuncionario) {
+                fetchSchedulesByDate();
+            } else {
+                fetchAllSchedules();
+            }
+        };
+
+        socket.on("request:usage-updated", handleRequestUsageUpdated);
+
+        return () => {
+            socket.off("request:usage-updated", handleRequestUsageUpdated);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [petitionId, isFuncionario, date]);
+
     const toggleSlot = (startTime, endTime) => {
         const key = slotKey(startTime, endTime);
 
@@ -309,6 +330,14 @@ export function PetitionSchedule({
             });
 
             await fetchAllSchedules();
+
+            const filledLastDailyQuota =
+                Number.isFinite(selectedDateGlobalQuota?.available) &&
+                Number(selectedDateGlobalQuota.available) === 1;
+
+            if (filledLastDailyQuota && typeof onCloseRequested === "function") {
+                onCloseRequested();
+            }
         } catch (error) {
             showErrorAlert("Error", "No se pudo tomar la hora", error);
         } finally {
@@ -366,24 +395,34 @@ export function PetitionSchedule({
         });
     };
 
-    const isCitizenPendingSameSlotInAnotherPetition = (schedule) => {
-        if (!isCiudadano || !schedule) return false;
+    const getCitizenAppointmentForSlot = (schedule) => {
+        if (!isCiudadano || !schedule) return null;
 
-        return citizenAppointments.some((appointment) => {
-            if (!appointment || appointment.status !== "pendiente") return false;
-            const existingSchedule = appointment.schedule;
-            if (!existingSchedule) return false;
+        return (
+            citizenAppointments.find((appointment) => {
+                if (!appointment) return false;
 
-            const sameDateTime =
-                existingSchedule.date === schedule.date &&
-                String(existingSchedule.startTime).slice(0, 5) === String(schedule.startTime).slice(0, 5) &&
-                String(existingSchedule.endTime).slice(0, 5) === String(schedule.endTime).slice(0, 5);
+                const existingSchedule = appointment.schedule;
+                if (!existingSchedule) return false;
 
-            if (!sameDateTime) return false;
+                const sameDateTime =
+                    existingSchedule.date === schedule.date &&
+                    String(existingSchedule.startTime).slice(0, 5) === String(schedule.startTime).slice(0, 5) &&
+                    String(existingSchedule.endTime).slice(0, 5) === String(schedule.endTime).slice(0, 5);
 
-            return Number(appointment.petitionId) !== Number(schedule.petitionId);
-        });
+                if (!sameDateTime) return false;
+
+                return Number(appointment.petitionId) === Number(schedule.petitionId);
+            }) || null
+        );
     };
+
+    const hasActiveAppointmentInCurrentPetition = isCiudadano && citizenAppointments.some(
+        (appointment) =>
+            appointment &&
+            Number(appointment.petitionId) === Number(petitionId) &&
+            ["pendiente", "aprobado"].includes(appointment.status)
+    );
 
     const formatDate = (dateString) => {
         if (!dateString) return "-";
@@ -536,24 +575,47 @@ export function PetitionSchedule({
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                             {schedulesForSelectedDate.map((s) => {
-                                const available = s.status === "disponible";
+                                const slotRemaining = Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0));
+                                const available = slotRemaining > 0;
                                 const hasConflict = hasCitizenTimeConflict(s);
+                                const mySlotAppointment = getCitizenAppointmentForSlot(s);
                                 const isMyPendingSlot = s.status === "pendiente" && isCitizenOwnerOfPendingSlot(s);
-                                const isMyPendingSameSlotInOtherPetition =
-                                    s.status === "pendiente" && isCitizenPendingSameSlotInAnotherPetition(s);
                                 const isOtherCitizenPendingSlot = isCiudadano && s.status === "pendiente" && !isMyPendingSlot;
+                                const isPendingButStillAvailable = isOtherCitizenPendingSlot && available;
+                                const showPartialAvailableBadge = isPendingButStillAvailable;
                                 const isBlockedByDateQuota =
                                     isCiudadano &&
                                     available &&
                                     Number.isFinite(selectedDateGlobalQuota?.available) &&
                                     selectedDateGlobalQuota.available <= 0;
-                                const canTake = isCiudadano && available && !hasConflict && !isBlockedByDateQuota;
-                                const badgeType = isBlockedByDateQuota
+                                const canTake =
+                                    isCiudadano &&
+                                    available &&
+                                    !hasConflict &&
+                                    !isBlockedByDateQuota &&
+                                    !hasActiveAppointmentInCurrentPetition;
+                                const badgeType = mySlotAppointment?.status === "aprobado"
+                                    ? "info"
+                                    : mySlotAppointment?.status === "rechazado"
+                                        ? "neutral"
+                                    : isBlockedByDateQuota
                                     ? "error"
-                                    : isOtherCitizenPendingSlot
+                                    : isOtherCitizenPendingSlot && !available
                                         ? "error"
+                                    : isPendingButStillAvailable
+                                            ? "success"
                                         : getType(s.status);
-                                const badgeText = isBlockedByDateQuota ? "sin cupo fecha" : s.status;
+                                const badgeText = mySlotAppointment?.status === "aprobado"
+                                    ? "aprobado"
+                                    : mySlotAppointment?.status === "rechazado"
+                                        ? "rechazado"
+                                    : isBlockedByDateQuota
+                                    ? "sin cupo fecha"
+                                    : isOtherCitizenPendingSlot && !available
+                                        ? "reservada"
+                                    : isPendingButStillAvailable
+                                        ? "disponible"
+                                        : s.status;
 
                                 return (
                                     <div key={s.id} className="border rounded-lg p-3 bg-gray-50 flex flex-col gap-2">
@@ -561,7 +623,18 @@ export function PetitionSchedule({
                                             <p className="text-sm font-semibold text-gray-900">
                                                 {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
                                             </p>
-                                            <Badge type={badgeType} text={badgeText} showIcon={false} />
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[11px] text-gray-600">
+                                                    {slotRemaining}/{Number(s.slotCapacity ?? 1)}
+                                                </span>
+                                                {showPartialAvailableBadge ? (
+                                                    <span className="text-xs px-2 py-1 flex items-center justify-center rounded-md border border-emerald-300 bg-emerald-200 text-emerald-900 font-medium">
+                                                        disponible
+                                                    </span>
+                                                ) : (
+                                                    <Badge type={badgeType} text={badgeText} showIcon={false} />
+                                                )}
+                                            </div>
                                         </div>
 
                                         <div className="flex justify-end">
@@ -573,28 +646,6 @@ export function PetitionSchedule({
                                                     className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
                                                 >
                                                     Cupo fecha lleno
-                                                </button>
-                                            )}
-
-                                            {isCiudadano && available && hasConflict && (
-                                                <button
-                                                    type="button"
-                                                    disabled
-                                                    title="Ya tienes una hora en ese horario para la misma fecha"
-                                                    className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
-                                                >
-                                                    Hora tomada
-                                                </button>
-                                            )}
-
-                                            {isCiudadano && isMyPendingSameSlotInOtherPetition && (
-                                                <button
-                                                    type="button"
-                                                    disabled
-                                                    title="Esta misma hora ya la tomaste en otra peticion"
-                                                    className="px-2 py-1 text-xs rounded-md border border-red-200 bg-red-50 text-red-700 cursor-not-allowed"
-                                                >
-                                                    Reservada
                                                 </button>
                                             )}
 

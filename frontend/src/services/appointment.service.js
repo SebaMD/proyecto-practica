@@ -107,3 +107,41 @@ export async function deleteAppointment(id) {
         };
     }
 }
+
+export async function exportAppointmentsReport(date) {
+    try {
+        const response = await axios.get("/appointments/export", {
+            params: { date },
+            responseType: "blob",
+        });
+
+        return {
+            success: true,
+            data: response.data,
+        };
+    } catch (error) {
+        console.error("Error en exportSupervisorAppointmentsReport():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudo exportar el reporte",
+        };
+    }
+}
+
+export async function getSupervisorReportDates() {
+    try {
+        const response = await axios.get("/appointments/export/dates");
+
+        return {
+            success: true,
+            data: response.data.data || [],
+            message: response.data.message,
+        };
+    } catch (error) {
+        console.error("Error en getSupervisorReportDates():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudieron obtener las fechas del reporte",
+        };
+    }
+}

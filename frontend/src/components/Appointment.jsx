@@ -196,11 +196,15 @@ export function Appointment({ appointment, onActionSuccess }) {
     const requestedHour = appointment.schedule ? `${appointment.schedule.startTime?.slice(0, 5)} - ${appointment.schedule.endTime?.slice(0, 5)}` : "-";
 
     return (
-        <div className="border border-gray-300 px-6 py-4 rounded-md bg-white flex flex-col gap-3">
+        <div
+            className={`border border-gray-400 px-6 py-4 rounded-md bg-white flex flex-col gap-3 transition-all duration-200 ${
+                isSupervisor || isCiudadano ? "hover:-translate-y-1 hover:shadow-lg" : ""
+            }`}
+        >
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <p className={`font-semibold ${isCiudadano ? "text-lg" : "text-base"}`}>
-                        {isSupervisor ? citizenName : petitionName}
+                        {isSupervisor ? `Nombre: ${citizenName}` : petitionName}
                     </p>
                     {isSupervisor && (
                         <p className="text-sm text-gray-600">

@@ -1,1 +1,47 @@
 @import "tailwindcss";
+
+button:not(:disabled) {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .route-transition {
+        animation-duration: 360ms;
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+        will-change: transform, opacity;
+    }
+
+    .route-transition.route-transition-right {
+        animation-name: route-slide-in-right;
+    }
+
+    .route-transition.route-transition-left {
+        animation-name: route-slide-in-left;
+    }
+}
+
+@keyframes route-slide-in-right {
+    from {
+        opacity: 0;
+        transform: translateX(52px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes route-slide-in-left {
+    from {
+        opacity: 0;
+        transform: translateX(-52px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}

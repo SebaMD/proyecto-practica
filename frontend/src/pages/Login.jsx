@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate} from 'react-router-dom';
 import useLogin from '@hooks/useLogin';
 import { login } from '@services/auth.service';
@@ -23,7 +23,7 @@ const Login = () => {
         handleInputChange();
 
         try {
-            // Elimina los datos (si es que existen) de otra sesión iniciada
+            // Elimina los datos (si es que existen) de otra sesiÃ³n iniciada
             await logout();
             const result = await login(email, password);
 
@@ -35,17 +35,17 @@ const Login = () => {
             }
         } catch (err) {
             console.error('Login error:', err);
-            errorData("Error inesperado al iniciar sesión");
+            errorData("Error inesperado al iniciar sesiÃ³n");
         }
         setLoading(false);
     };
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 w-full max-w-md transform transition-all hover:scale-105">
+        <div className="min-h-screen bg-linear-to-br from-blue-600 via-emerald-500 to-yellow-400 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 w-full max-w-md transform transition-all hover:scale-105 border-t-4 border-red-500">
                 <form className="space-y-6" onSubmit={handleSubmit}>
-                    <h1 className="text-4xl font-bold text-center bg-clip-text text-transparent bg-linear-to-r from-purple-600 to-blue-600 mb-8">
-                        Iniciar sesión
+                    <h1 className="text-4xl font-bold text-center bg-clip-text text-transparent bg-linear-to-r from-blue-700 via-emerald-600 to-red-600 mb-8">
+                        Iniciar sesion
                     </h1>
 
                     {errorEmail && (
@@ -73,7 +73,7 @@ const Login = () => {
                             }}
                             placeholder="usuario@ejemplo.com"
                             required
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-all duration-300"
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all duration-300"
                         />
                     </div>
 
@@ -91,16 +91,16 @@ const Login = () => {
                             }}
                             placeholder="**********"
                             required
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-all duration-300"
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all duration-300"
                         />
                     </div>
 
                     <button 
                         type="submit" 
                         disabled={loading}
-                        className="w-full bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-purple-300 disabled:opacity-50"
+                        className="w-full bg-linear-to-r from-blue-600 via-emerald-500 to-red-500 hover:from-blue-700 hover:via-emerald-600 hover:to-red-600 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-yellow-300 disabled:opacity-50"
                     >
-                        {loading ? "Cargando..." : "Iniciar sesión"}
+                        {loading ? "Cargando..." : "Iniciar sesion"}
                     </button>
                 </form>
             </div>

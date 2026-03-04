@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 
-import { getRequests, createRequest, getRenewalQuota } from "@services/request.service";
+import { getRequests,
+        createRequest, 
+        getRequestDateUsage, 
+        exportRequestsReport, 
+        getRequestReportDates,
+} from "@services/request.service";
 import { getPetitions } from "@services/petition.service";
 import { getPetitionSchedules } from "@services/petitionSchedule.service";
 import { getActivePeriod } from "@services/period.service";
@@ -20,7 +26,7 @@ import {
     MessageSquareDashedIcon,
 } from "lucide-react";
 
-const GLOBAL_DAILY_QUOTA = 10;
+const GLOBAL_DAILY_QUOTA = 15;
 
 const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -43,14 +49,21 @@ const Requests = () => {
     const [pendingCounter, setPendingCounter] = useState(0);
     const [approvedCounter, setApprovedCounter] = useState(0);
     const [rejectedCounter, setRejectedCounter] = useState(0);
-    const [renewalQuotaInfo, setRenewalQuotaInfo] = useState({
-        globalAvailable: GLOBAL_DAILY_QUOTA,
-        globalMax: GLOBAL_DAILY_QUOTA,
-    });
     const [activePeriod, setActivePeriod] = useState(null);
+    const [requestUsageByDate, setRequestUsageByDate] = useState({});
+    const [requestReportDate, setRequestReportDate] = useState("");
+    const [requestReportDates, setRequestReportDates] = useState([]);
+    const [requestReportStatusMessage, setRequestReportStatusMessage] = useState("");
 
     const { user } = useAuth();
+    const [searchParams] = useSearchParams();
     const isCiudadano = user.role === "ciudadano";
+    const funcionarioView = searchParams.get("view"); // pending | reviews | null
+    const isFuncionarioPendingView = !isCiudadano && funcionarioView !== "reviews";
+    const isFuncionarioReviewsView = !isCiudadano && funcionarioView !== "pending";
+    const showPendingBadge = isCiudadano || isFuncionarioPendingView;
+    const showApprovedBadge = isCiudadano || isFuncionarioReviewsView;
+    const showRejectedBadge = isCiudadano || isFuncionarioReviewsView;
 
     const fetchRequests = async () => {
         try {
@@ -80,42 +93,29 @@ const Requests = () => {
         }
     };
 
-    const hydrateSchedulesForPetitions = async (petitionList) => {
-        const responses = await Promise.all(
-            petitionList.map(async (p) => {
-                const res = await getPetitionSchedules(p.id);
-                return { petitionId: p.id, schedules: res.success ? res.data || [] : [] };
-            })
-        );
-
-        const newSchedulesMap = {};
-        responses.forEach(({ petitionId, schedules }) => {
-            newSchedulesMap[petitionId] = schedules;
-        });
-
-        setSchedulesByPetition(newSchedulesMap);
-    };
-
     const fetchRenewalPetitions = async () => {
         try {
             const result = await getPetitions();
             if (!result.success) return;
             const data = result.data || [];
             setPetitions(data);
-            if (isCiudadano) await hydrateSchedulesForPetitions(data);
+            if (isCiudadano) {
+                const responses = await Promise.all(
+                    data.map(async (p) => {
+                        const res = await getPetitionSchedules(p.id);
+                        return { petitionId: p.id, schedules: res.success ? res.data || [] : [] };
+                    })
+                );
+
+                const newSchedulesMap = {};
+                responses.forEach(({ petitionId, schedules }) => {
+                    newSchedulesMap[petitionId] = schedules;
+                });
+                setSchedulesByPetition(newSchedulesMap);
+            }
         } catch (error) {
             console.error("Error al obtener peticiones para renovacion:", error);
         }
-    };
-
-    const fetchRenewalQuota = async () => {
-        const result = await getRenewalQuota();
-        if (!result.success || !result.data) return;
-
-        setRenewalQuotaInfo({
-            globalAvailable: Number(result.data.available ?? GLOBAL_DAILY_QUOTA),
-            globalMax: Number(result.data.max ?? GLOBAL_DAILY_QUOTA),
-        });
     };
 
     const fetchActivePeriod = async () => {
@@ -123,35 +123,46 @@ const Requests = () => {
         setActivePeriod(period || null);
     };
 
+    const fetchRequestDateUsage = async () => {
+        const result = await getRequestDateUsage();
+        if (!result.success) return;
+
+        const usageMap = {};
+        (result.data || []).forEach((item) => {
+            usageMap[item.date] = Number(item.used || 0);
+        });
+        setRequestUsageByDate(usageMap);
+    };
+
     const refreshCitizenRequests = async () => {
         await fetchRequests();
-        if (isCiudadano) await fetchRenewalQuota();
     };
 
     useEffect(() => {
-        fetchRequests();
-        if (isCiudadano) {
-            fetchRenewalPetitions();
-            fetchRenewalQuota();
-            fetchActivePeriod();
-        }
-    }, []);
-
-    useEffect(() => {
-        const handleRenewalQuotaUpdated = (payload) => {
-            if (!payload) return;
-            setRenewalQuotaInfo({
-                globalAvailable: Number(payload.available ?? GLOBAL_DAILY_QUOTA),
-                globalMax: Number(payload.max ?? GLOBAL_DAILY_QUOTA),
-            });
+        const handleScheduleUpdated = async () => {
+            if (!isCiudadano) return;
+            await fetchRenewalPetitions();
         };
 
-        socket.on("renewal:quota-updated", handleRenewalQuotaUpdated);
+        const handleRequestUsageUpdated = async () => {
+            if (isCiudadano) {
+                await fetchRenewalPetitions();
+                await fetchRequestDateUsage();
+                return;
+            }
+
+            await fetchRequestReportDates();
+        };
+
+        socket.on("schedule:updated", handleScheduleUpdated);
+        socket.on("request:usage-updated", handleRequestUsageUpdated);
 
         return () => {
-            socket.off("renewal:quota-updated", handleRenewalQuotaUpdated);
+            socket.off("schedule:updated", handleScheduleUpdated);
+            socket.off("request:usage-updated", handleRequestUsageUpdated);
         };
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isCiudadano]);
 
     const badgeAction = (id) => {
         if (id === "pending") togglePending((p) => !p);
@@ -186,7 +197,11 @@ const Requests = () => {
                     showConfirmButton: false,
                 });
                 fetchRequests();
-                if (isCiudadano) fetchRenewalQuota();
+                await fetchRequestReportDates();
+                if (isCiudadano) {
+                    fetchRenewalPetitions();
+                    fetchRequestDateUsage();
+                }
             } else {
                 showErrorAlert("Error", response.message);
             }
@@ -210,15 +225,151 @@ const Requests = () => {
                         <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Descripcion</p>
                         <p class="text-sm text-gray-800 whitespace-pre-wrap">${petition.description || "-"}</p>
                     </div>
+                    <div class="border rounded-lg p-3 bg-blue-50 border-blue-200">
+                        <p class="text-sm text-blue-900">La fecha y hora de retiro se asignaran segun la fecha solicitada y disponibilidad.</p>
+                    </div>
                 </div>
             `,
             confirmButtonText: "Cerrar",
         });
     };
 
+    const getGlobalQuotaByDate = (date) => {
+        if (!date) return { available: GLOBAL_DAILY_QUOTA, max: GLOBAL_DAILY_QUOTA };
+
+        const allSchedules = Object.values(schedulesByPetition).flat();
+        const daySchedules = allSchedules.filter((s) => s.date === date);
+        const slotUsageByKey = new Map();
+
+        daySchedules.forEach((s) => {
+            const start = String(s.startTime).slice(0, 5);
+            const end = String(s.endTime).slice(0, 5);
+            const key = `${s.date}|${start}|${end}`;
+            if (!slotUsageByKey.has(key)) {
+                slotUsageByKey.set(key, Number(s.slotUsed || 0));
+            }
+        });
+
+        const totalUsed = Array.from(slotUsageByKey.values()).reduce((acc, value) => acc + value, 0);
+        const requestUsed = Number(requestUsageByDate[date] || 0);
+        return {
+            available: Math.max(0, GLOBAL_DAILY_QUOTA - (totalUsed + requestUsed)),
+            max: GLOBAL_DAILY_QUOTA,
+        };
+    };
+
+    const getQuotaInfoForRenewalPetition = (petition, preferredDate = "") => {
+        const schedules = schedulesByPetition[petition.id] || [];
+        if (!schedules.length) {
+            return {
+                available: 0,
+                max: 0,
+                globalAvailable: GLOBAL_DAILY_QUOTA,
+                globalMax: GLOBAL_DAILY_QUOTA,
+                date: null,
+            };
+        }
+
+        const dates = [...new Set(schedules.map((s) => s.date))].sort();
+        const targetDate =
+            preferredDate && dates.includes(preferredDate)
+                ? preferredDate
+                : dates[0];
+
+        const dateSchedules = schedules.filter((s) => s.date === targetDate);
+
+        const available = dateSchedules.reduce(
+            (acc, s) => acc + Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0)),
+            0
+        );
+        const max = dateSchedules.reduce((acc, s) => acc + Number(s.slotCapacity ?? 1), 0);
+        const globalQuota = getGlobalQuotaByDate(targetDate);
+
+        return {
+            available,
+            max,
+            globalAvailable: globalQuota.available,
+            globalMax: globalQuota.max,
+            date: targetDate,
+        };
+    };
+
     const renewalPetitions = petitions.filter((petition) => (schedulesByPetition[petition.id] || []).length > 0);
-    const isRenewalQuotaClosed = Number(renewalQuotaInfo?.globalAvailable ?? 0) <= 0;
     const isRenewalPeriodClosed = isCiudadano && !activePeriod;
+    const [selectedRenewalDateByPetition, setSelectedRenewalDateByPetition] = useState({});
+
+    const handleRenewalDateChange = (petition, dateValue) => {
+        setSelectedRenewalDateByPetition((prev) => ({
+            ...prev,
+            [petition.id]: dateValue,
+        }));
+    };
+
+    const hasActiveRenewalInPetition = (petitionId) =>
+        requests.some(
+            (request) =>
+                Number(request?.petitionId) === Number(petitionId) &&
+                ["pendiente", "aprobado"].includes(request?.status)
+        );
+
+    const fetchRequestReportDates = async () => {
+        if (isCiudadano) return;
+
+        const result = await getRequestReportDates();
+        if (!result.success) {
+            setRequestReportDates([]);
+            setRequestReportDate("");
+            setRequestReportStatusMessage(result.message || "No se pudieron obtener las fechas del reporte de solicitudes");
+            return;
+        }
+
+        const dates = result.data || [];
+        setRequestReportDates(dates);
+        setRequestReportDate((prev) => (prev && dates.includes(prev) ? prev : dates[0] || ""));
+        setRequestReportStatusMessage(result.message || "");
+    };
+
+    const handleExportRequestsReport = async () => {
+        if (!requestReportDate) {
+            showErrorAlert(
+                "Exportacion no disponible",
+                requestReportStatusMessage || "No hay fechas disponibles para exportar"
+            );
+            return;
+        }
+
+        const result = await exportRequestsReport(requestReportDate);
+
+        if (!result.success) {
+            showErrorAlert("Error", result.message);
+            return;
+        }
+
+        const blob = new Blob([result.data], {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `renovaciones-${requestReportDate}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
+    useEffect(() => {
+        fetchRequests();
+        if (isCiudadano) {
+            fetchRenewalPetitions();
+            fetchActivePeriod();
+            fetchRequestDateUsage();
+        } else {
+            fetchRequestReportDates();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="min-h-screen bg-gray-100">
@@ -235,6 +386,37 @@ const Requests = () => {
                                     : "Revisa y responde solicitudes de renovacion de licencia."}
                             </p>
                         </div>
+
+                        {!isCiudadano && isFuncionarioReviewsView && (
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={requestReportDate}
+                                    onChange={(e) => setRequestReportDate(e.target.value)}
+                                    className="px-3 py-2 text-sm border rounded-md border-gray-300"
+                                >
+                                    {requestReportDates.length === 0 ? (
+                                        <option value="">Sin fechas disponibles</option>
+                                    ) : (
+                                        requestReportDates.map((date) => (
+                                            <option key={date} value={date}>
+                                                {date}
+                                            </option>
+                                        ))
+                                    )}
+                                </select>
+
+                                <button
+                                    onClick={handleExportRequestsReport}
+                                    className={`px-3 py-2 text-sm border rounded-md ${
+                                        requestReportDate
+                                            ? "text-green-700 border-green-200 hover:bg-green-50"
+                                            : "text-amber-700 border-amber-200 hover:bg-amber-50"
+                                    }`}
+                                >
+                                    Exportar Excel
+                                </button>
+                            </div>
+                        )}
 
                         {isCiudadano && (
                             <div className={`border rounded-lg px-4 py-2 min-w-[380px] ${activePeriod ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
@@ -266,7 +448,7 @@ const Requests = () => {
                     <div className="flex gap-4 items-center">
                         {loading && <Badge text="Cargando..." />}
 
-                        {pendingCounter > 0 && (
+                        {showPendingBadge && pendingCounter > 0 && (
                             <Badge
                                 type="pending"
                                 text={`${pendingCounter} pendiente(s)`}
@@ -276,7 +458,7 @@ const Requests = () => {
                             />
                         )}
 
-                        {approvedCounter > 0 && (
+                        {showApprovedBadge && approvedCounter > 0 && (
                             <Badge
                                 type="success"
                                 text={`${approvedCounter} aprobada(s)`}
@@ -286,7 +468,7 @@ const Requests = () => {
                             />
                         )}
 
-                        {rejectedCounter > 0 && (
+                        {showRejectedBadge && rejectedCounter > 0 && (
                             <Badge
                                 type="error"
                                 text={`${rejectedCounter} rechazada(s)`}
@@ -300,30 +482,34 @@ const Requests = () => {
                     {!loading && isCiudadano && (
                         <div className="flex flex-col gap-6">
                             <div className="flex gap-6">
-                                <div className="flex-2">
+                                <div className="flex-2 min-h-0 max-h-[22rem] flex flex-col">
                                     <h3 className="text-xl font-semibold mb-4">Solicitudes pendientes</h3>
                                     {pendingCounter > 0 ? (
-                                        requests.map(
-                                            (r) =>
-                                                r.status === "pendiente" && (
-                                                    <RequestCard
-                                                        key={r.id}
-                                                        request={r}
-                                                        fetchCallback={refreshCitizenRequests}
-                                                    />
-                                                )
-                                        )
+                                        <div className="flex-1 min-h-0 overflow-y-auto pr-2 flex flex-col gap-4">
+                                            {requests.map(
+                                                (r) =>
+                                                    r.status === "pendiente" && (
+                                                        <RequestCard
+                                                            key={r.id}
+                                                            request={r}
+                                                            fetchCallback={refreshCitizenRequests}
+                                                        />
+                                                    )
+                                            )}
+                                        </div>
                                     ) : (
                                         <p className="text-gray-500 italic">No tienes solicitudes de renovacion pendientes</p>
                                     )}
                                 </div>
 
-                                <div className="flex-1">
+                                <div className="flex-1 min-h-0 max-h-[22rem] flex flex-col">
                                     <h3 className="text-xl font-semibold mb-4">Historial de renovaciones</h3>
                                     {approvedCounter || rejectedCounter ? (
-                                        requests.map(
-                                            (r) => r.status !== "pendiente" && <RequestCard key={r.id} request={r} isCompact />
-                                        )
+                                        <div className="flex-1 min-h-0 overflow-y-auto pr-2 flex flex-col gap-4">
+                                            {requests.map(
+                                                (r) => r.status !== "pendiente" && <RequestCard key={r.id} request={r} isCompact />
+                                            )}
+                                        </div>
                                     ) : (
                                         <p className="text-gray-500 italic flex items-center gap-2">
                                             <MessageSquareDashedIcon size={18} />
@@ -344,22 +530,43 @@ const Requests = () => {
                                 {!loading && renewalPetitions.length > 0 && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {renewalPetitions.map((petition) => {
+                                        const localSelectedDate = selectedRenewalDateByPetition[petition.id] || "";
+                                        const quotaInfo = getQuotaInfoForRenewalPetition(petition, localSelectedDate);
+                                        const dateOptions = [...new Set((schedulesByPetition[petition.id] || []).map((s) => s.date))].sort();
+                                        const isRenewalQuotaClosed = Number(quotaInfo?.globalAvailable ?? 0) <= 0;
+                                        const hasOwnActiveRenewal = isCiudadano && hasActiveRenewalInPetition(petition.id);
+
                                         return (
                                             <PetitionCard
                                                 key={`renewal-petition-${petition.id}`}
                                                 petition={petition}
-                                                quotaInfo={renewalQuotaInfo}
+                                                quotaInfo={quotaInfo}
+                                                dateOptions={dateOptions}
+                                                selectedDateValue={localSelectedDate}
+                                                onDateChange={handleRenewalDateChange}
                                                 onView={handleViewPetitionDetails}
                                                 onSelect={(selectedPetition) => handleCreateRequest(selectedPetition)}
                                                 selectLabel={
-                                                    isRenewalPeriodClosed
-                                                        ? "Periodo cerrado"
-                                                        : isRenewalQuotaClosed
-                                                            ? "Sin cupos"
-                                                            : "Solicitar renovacion"
+                                                    hasOwnActiveRenewal
+                                                        ? "Con cupo"
+                                                        : isRenewalPeriodClosed
+                                                            ? "Periodo cerrado"
+                                                            : isRenewalQuotaClosed
+                                                                ? "Sin cupos"
+                                                                : "Solicitar renovacion"
                                                 }
-                                                selectBlocked={isRenewalPeriodClosed || isRenewalQuotaClosed}
+                                                selectBlocked={hasOwnActiveRenewal || isRenewalPeriodClosed || isRenewalQuotaClosed}
+                                                selectSuccess={hasOwnActiveRenewal}
                                                 onBlockedSelect={() => {
+                                                    if (hasOwnActiveRenewal) {
+                                                        return Swal.fire({
+                                                            icon: "info",
+                                                            title: "Ya tienes una solicitud",
+                                                            text: "Revisa tu solicitud en Solicitudes pendientes o Historial de renovaciones.",
+                                                            confirmButtonText: "Entendido",
+                                                        });
+                                                    }
+
                                                     if (isRenewalPeriodClosed) {
                                                         return Swal.fire({
                                                             icon: "warning",
@@ -372,17 +579,15 @@ const Requests = () => {
                                                     return Swal.fire({
                                                         icon: "warning",
                                                         title: "Sin cupos hoy",
-                                                        text: "No hay cupos disponibles para renovacion hoy. Intenta nuevamente manana.",
+                                                        text: "No hay cupos disponibles para renovacion hoy. Intenta con otra fecha.",
                                                         confirmButtonText: "Entendido",
                                                     });
                                                 }}
-                                                    hideDateBlock
-                                                    hideHoursBlock
-                                                    quotaLabel="Cupos"
-                                                    hideMetaTags
-                                                />
-                                            );
-                                        })}
+                                                hideHoursBlock
+                                                hideMetaTags
+                                            />
+                                        );
+                                    })}
                                     </div>
                                 )}
 
@@ -395,7 +600,13 @@ const Requests = () => {
 
                     {!loading && !isCiudadano && requests.length > 0 && (
                         <div>
-                            <h3 className="text-xl font-semibold mb-4">Listado de renovaciones</h3>
+                            <h3 className="text-xl font-semibold mb-4">
+                                {isFuncionarioPendingView && !isFuncionarioReviewsView
+                                    ? "Solicitudes pendientes"
+                                    : !isFuncionarioPendingView && isFuncionarioReviewsView
+                                        ? "Solicitudes revisadas"
+                                        : "Listado de renovaciones"}
+                            </h3>
 
                             <div className="border rounded-lg overflow-auto">
                                 <table className="w-full text-sm">
@@ -410,13 +621,22 @@ const Requests = () => {
                                     </thead>
                                     <tbody>
                                         {requests.map((r) => {
-                                            if (r.status === "pendiente" && showPending) {
-                                                return <RequestCard key={r.id} request={r} fetchCallback={fetchRequests} />;
+                                            if (r.status === "pendiente" && showPending && isFuncionarioPendingView) {
+                                                return (
+                                                    <RequestCard
+                                                        key={r.id}
+                                                        request={r}
+                                                        fetchCallback={async () => {
+                                                            await fetchRequests();
+                                                            await fetchRequestReportDates();
+                                                        }}
+                                                    />
+                                                );
                                             }
-                                            if (r.status === "aprobado" && showApproved) {
+                                            if (r.status === "aprobado" && showApproved && isFuncionarioReviewsView) {
                                                 return <RequestCard key={r.id} request={r} />;
                                             }
-                                            if (r.status === "rechazado" && showRejected) {
+                                            if (r.status === "rechazado" && showRejected && isFuncionarioReviewsView) {
                                                 return <RequestCard key={r.id} request={r} />;
                                             }
                                             return null;
@@ -467,6 +687,7 @@ async function createRequestDialog(preselectedPetition = null) {
             <div class="border rounded-lg p-3 bg-gray-50 text-left mb-3">
                 <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Peticion</p>
                 <p class="text-sm font-medium text-gray-800">${preselectedPetition.name}</p>
+                <p class="text-xs text-gray-600 mt-1">Fecha: ${preselectedPetition.preferredDate || "-"}</p>
             </div>
         `
         : `
@@ -495,7 +716,8 @@ async function createRequestDialog(preselectedPetition = null) {
             <label class="text-sm font-medium">Especifica el motivo</label>
             <textarea
                 id="otherReason"
-                class="swal2-textarea"
+                class="mt-2 w-full min-h-[96px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 outline-none transition-all duration-150 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                style="margin:0; resize:none;"
                 placeholder="Escribe el motivo de renovacion"
             ></textarea>
         </div>
@@ -544,6 +766,7 @@ async function createRequestDialog(preselectedPetition = null) {
             const petitionId = preselectedPetition
                 ? Number(preselectedPetition.id)
                 : Number(document.getElementById("petition").value);
+            const requestDate = preselectedPetition?.preferredDate;
             const reason = document.getElementById("renewalReason")?.value || "";
             const otherReason = document.getElementById("otherReason")?.value?.trim() || "";
 
@@ -565,7 +788,12 @@ async function createRequestDialog(preselectedPetition = null) {
                 return false;
             }
 
-            return { petitionId, description };
+            if (!requestDate) {
+                Swal.showValidationMessage("Debes seleccionar una fecha con cupos disponibles.");
+                return false;
+            }
+
+            return { petitionId, description, requestDate };
         },
     });
 

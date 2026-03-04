@@ -1,4 +1,5 @@
 import { useAuth } from "@context/AuthContext";
+import { useState } from "react";
 import {
     FileText,
     House,
@@ -8,7 +9,8 @@ import {
     FilePenLine,
     CalendarRange,
     FileSearchCorner,
-    KeyRound
+    KeyRound,
+    Settings
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -62,6 +64,7 @@ export function Navbar() {
     const currentPath = location.pathname;
     const currentRouteWithSearch = `${location.pathname}${location.search}`;
     const { user } = useAuth();
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const roleText = {
         administrador: "Administrador",
@@ -77,11 +80,40 @@ export function Navbar() {
     if (user.role === "funcionario") RoleIcon = KeyRound;
 
     const visibleMenuItems = menuItems.flatMap((item) => {
+        const isFuncionarioRequestsMenu =
+            item.route === "/requests" &&
+            Array.isArray(item.roles) &&
+            item.roles.length === 2 &&
+            item.roles.includes("ciudadano") &&
+            item.roles.includes("funcionario");
+
         const isSupervisorAppointmentsMenu =
             item.route === "/appointments" &&
             Array.isArray(item.roles) &&
             item.roles.length === 1 &&
             item.roles[0] === "supervisor";
+
+        if (isFuncionarioRequestsMenu) {
+            return [
+                {
+                    ...item,
+                    roles: ["ciudadano"],
+                },
+                {
+                    ...item,
+                    title: "Pendientes",
+                    icon: FileSearchCorner,
+                    route: "/requests?view=pending",
+                    roles: ["funcionario"],
+                },
+                {
+                    ...item,
+                    title: "Revisadas",
+                    route: "/requests?view=reviews",
+                    roles: ["funcionario"],
+                },
+            ];
+        }
 
         if (!isSupervisorAppointmentsMenu) return [item];
 
@@ -142,14 +174,51 @@ export function Navbar() {
                     })}
                 </nav>
 
-                {/* Perfil */}
-                <NavLink
-                    to="/profile"
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-blue-100 hover:bg-blue-700/50 hover:text-white"
+                {/* Perfil / Sesion */}
+                <div className="relative flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setIsSettingsOpen((prev) => !prev)}
+                        className="flex items-center justify-center rounded-md px-3 py-2 text-blue-100 hover:bg-blue-700/50 hover:text-white"
+                        title="Opciones de sesion"
+                        aria-label="Opciones de sesion"
                     >
-                    <User className="h-4 w-4" />
-                    Perfil
-                </NavLink>
+                        <Settings
+                            className={`h-4 w-4 transition-transform duration-200 ${
+                                isSettingsOpen ? "rotate-90" : "rotate-0"
+                            }`}
+                        />
+                    </button>
+
+                    {isSettingsOpen && (
+                        <div className="absolute right-0 top-12 z-50 min-w-[160px] rounded-md border border-blue-200 bg-white p-2 shadow-lg">
+                            <a
+                                href="https://new.santajuana.cl/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => setIsSettingsOpen(false)}
+                                className="block rounded-md px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                            >
+                                Ir a municipalidad
+                            </a>
+                            <NavLink
+                                to="/logout"
+                                onClick={() => setIsSettingsOpen(false)}
+                                className="block rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                            >
+                                Cerrar sesion
+                            </NavLink>
+                        </div>
+                    )}
+
+                    <NavLink
+                        to="/profile"
+                        className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-blue-100 hover:bg-blue-700/50 hover:text-white"
+                    >
+                        <User className="h-4 w-4" />
+                        Perfil
+                    </NavLink>
+                </div>
             </div>
         </header>
     );

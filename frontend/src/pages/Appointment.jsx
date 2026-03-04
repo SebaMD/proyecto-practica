@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@context/AuthContext";
-import { getAppointments } from "@services/appointment.service";
+import {
+    getAppointments,
+    exportAppointmentsReport,
+    getSupervisorReportDates,
+} from "@services/appointment.service";
 import { showErrorAlert } from "@helpers/sweetAlert";
 import { Navbar } from "@components/Navbar";
 import { Appointment } from "@components/Appointment";
@@ -15,6 +19,10 @@ const Appointments = () => {
     const [showPending, setShowPending] = useState(true);
     const [showApproved, setShowApproved] = useState(true);
     const [showRejected, setShowRejected] = useState(true);
+
+    const [reportDate, setReportDate] = useState("");
+    const [reportDates, setReportDates] = useState([]);
+    const [reportStatusMessage, setReportStatusMessage] = useState("");
 
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
@@ -46,22 +54,77 @@ const Appointments = () => {
             setLoading(true);
             const result = await getAppointments();
 
-            if (result.success) {
-                const sorted = result.data.sort((a, b) => {
-                    const order = { pendiente: 1, aprobado: 2, rechazado: 3 };
-                    return order[a.status] - order[b.status];
-                });
-                setAppointments(sorted);
+            if (!result.success) {
+                setAppointments([]);
+                return;
             }
+
+            const sorted = (result.data || []).sort((a, b) => {
+                const order = { pendiente: 1, aprobado: 2, rechazado: 3 };
+                return order[a.status] - order[b.status];
+            });
+            setAppointments(sorted);
         } catch (error) {
+            setAppointments([]);
             showErrorAlert("Error", "No se pudieron cargar las citas", error);
         } finally {
             setLoading(false);
         }
     };
 
+    const fetchSupervisorReportDates = async () => {
+        if (!isSupervisor) return;
+
+        const result = await getSupervisorReportDates();
+        if (!result.success) {
+            setReportDates([]);
+            setReportDate("");
+            setReportStatusMessage(result.message || "No se pudieron obtener las fechas del reporte");
+            return;
+        }
+
+        const dates = result.data || [];
+        setReportDates(dates);
+        setReportDate((prev) => (prev && dates.includes(prev) ? prev : dates[0] || ""));
+        setReportStatusMessage(result.message || "");
+    };
+
+    const handleExportSupervisorReport = async () => {
+        if (!reportDate) {
+            showErrorAlert(
+                "Exportacion no disponible",
+                reportStatusMessage || "No hay fechas disponibles para exportar"
+            );
+            return;
+        }
+
+        const result = await exportAppointmentsReport(reportDate);
+
+        if (!result.success) {
+            showErrorAlert("Error", result.message);
+            return;
+        }
+
+        const blob = new Blob([result.data], {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `mis-revisiones-${reportDate}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
     useEffect(() => {
         fetchAppointments();
+        if (isSupervisor) {
+            fetchSupervisorReportDates();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const badgeAction = (id) => {
@@ -78,11 +141,43 @@ const Appointments = () => {
                 <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
 
                     {/* HEADER */}
-                    <div>
-                        <h1 className="font-bold text-2xl">Gestión de Citas</h1>
-                        <p className="text-gray-600">
-                        {isCitizen ? "Revisa el estado de tus citas" : "Gestiona las solicitudes de citas"}
-                        </p>
+                    <div className="flex justify-between items-start gap-4">
+                        <div>
+                            <h1 className="font-bold text-2xl">Gestión de Citas</h1>
+                            <p className="text-gray-600">
+                                {isCitizen ? "Revisa el estado de tus citas" : "Gestiona las solicitudes de citas"}
+                            </p>
+                        </div>
+
+                        {isSupervisor && showSupervisorReviewsSection && (
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={reportDate}
+                                    onChange={(e) => setReportDate(e.target.value)}
+                                    className="px-3 py-2 text-sm border rounded-md border-gray-300"
+                                >
+                                    {reportDates.length === 0 ? (
+                                        <option value="">Sin fechas disponibles</option>
+                                    ) : (
+                                        reportDates.map((date) => (
+                                            <option key={date} value={date}>
+                                                {date}
+                                            </option>
+                                        ))
+                                    )}
+                                </select>
+                                <button
+                                    onClick={handleExportSupervisorReport}
+                                    className={`px-3 py-2 text-sm border rounded-md ${
+                                        reportDate
+                                            ? "text-green-700 border-green-200 hover:bg-green-50"
+                                            : "text-amber-700 border-amber-200 hover:bg-amber-50"
+                                    }`}
+                                >
+                                    Exportar Excel
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* BADGES */}
@@ -128,9 +223,9 @@ const Appointments = () => {
                         <div className="flex flex-col gap-4">
                             {/* LISTADO CIUDADANO */}
                             {!loading && appointments.length > 0 && isCitizen && (
-                                <div className="flex flex-col gap-4">
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     {appointments.map((appointment) => {
-                                        if (appointment.status === "pendiente" && showPending)
+                                        if (appointment.status === "pendiente" && showPending) {
                                             return (
                                                 <Appointment
                                                     key={appointment.id}
@@ -138,8 +233,9 @@ const Appointments = () => {
                                                     onActionSuccess={fetchAppointments}
                                                 />
                                             );
+                                        }
 
-                                        if (appointment.status === "aprobado" && showApproved)
+                                        if (appointment.status === "aprobado" && showApproved) {
                                             return (
                                                 <Appointment
                                                     key={appointment.id}
@@ -147,8 +243,9 @@ const Appointments = () => {
                                                     onActionSuccess={fetchAppointments}
                                                 />
                                             );
+                                        }
 
-                                        if (appointment.status === "rechazado" && showRejected)
+                                        if (appointment.status === "rechazado" && showRejected) {
                                             return (
                                                 <Appointment
                                                     key={appointment.id}
@@ -156,6 +253,7 @@ const Appointments = () => {
                                                     onActionSuccess={fetchAppointments}
                                                 />
                                             );
+                                        }
 
                                         return null;
                                     })}
@@ -174,14 +272,17 @@ const Appointments = () => {
                                         ).length === 0 ? (
                                             <p className="text-sm text-gray-500 italic">No hay solicitudes pendientes.</p>
                                         ) : (
-                                            <div className="flex flex-col gap-4">
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                                 {pendingAppointments.map((appointment) => {
                                                     if (appointment.status === "pendiente" && showPending) {
                                                         return (
                                                             <Appointment
                                                                 key={appointment.id}
                                                                 appointment={appointment}
-                                                                onActionSuccess={fetchAppointments}
+                                                                onActionSuccess={async () => {
+                                                                    await fetchAppointments();
+                                                                    await fetchSupervisorReportDates();
+                                                                }}
                                                             />
                                                         );
                                                     }
@@ -202,14 +303,17 @@ const Appointments = () => {
                                         ).length === 0 ? (
                                             <p className="text-sm text-gray-500 italic">Aún no has revisado solicitudes.</p>
                                         ) : (
-                                            <div className="flex flex-col gap-4">
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                                 {myReviewedAppointments.map((appointment) => {
                                                     if (appointment.status === "aprobado" && showApproved) {
                                                         return (
                                                             <Appointment
                                                                 key={appointment.id}
                                                                 appointment={appointment}
-                                                                onActionSuccess={fetchAppointments}
+                                                                onActionSuccess={async () => {
+                                                                    await fetchAppointments();
+                                                                    await fetchSupervisorReportDates();
+                                                                }}
                                                             />
                                                         );
                                                     }
@@ -219,7 +323,10 @@ const Appointments = () => {
                                                             <Appointment
                                                                 key={appointment.id}
                                                                 appointment={appointment}
-                                                                onActionSuccess={fetchAppointments}
+                                                                onActionSuccess={async () => {
+                                                                    await fetchAppointments();
+                                                                    await fetchSupervisorReportDates();
+                                                                }}
                                                             />
                                                         );
                                                     }

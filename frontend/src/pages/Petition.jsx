@@ -1,4 +1,8 @@
 ﻿import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import flatpickr from "flatpickr";
+import { Spanish } from "flatpickr/dist/l10n/es.js";
+import "flatpickr/dist/flatpickr.min.css";
 import {
     getPetitions,
     createPetition,
@@ -18,6 +22,8 @@ import { Navbar } from "@components/Navbar";
 import { Badge } from "@components/Badge";
 import { PlusCircle, CheckCircle } from "lucide-react";
 import { getActivePeriod } from "@services/period.service";
+import { getAppointments } from "@services/appointment.service";
+import { getRequestDateUsage } from "@services/request.service";
 import socket from "@services/socket.service";
 import Swal from "sweetalert2";
 
@@ -35,7 +41,16 @@ const PREDEFINED_SLOTS = [
 ];
 
 const slotKey = (startTime, endTime) => `${startTime}-${endTime}`;
-const GLOBAL_DAILY_QUOTA = 10;
+const GLOBAL_DAILY_QUOTA = 15;
+const MAX_DATES_PER_PETITION = 10;
+
+const getRecentDateOptions = (schedules = [], max = MAX_DATES_PER_PETITION) => {
+    const uniqueDates = [...new Set((schedules || []).map((s) => s.date))];
+    return uniqueDates
+        .sort((a, b) => b.localeCompare(a))
+        .slice(0, max)
+        .sort();
+};
 
 const Petition = () => {
     const [loading, setLoading] = useState(false);
@@ -46,6 +61,8 @@ const Petition = () => {
     const [selectedCitizenDateByPetition, setSelectedCitizenDateByPetition] = useState({});
     const [selectedScheduleIdByPetition, setSelectedScheduleIdByPetition] = useState({});
     const [selectedCitizenDate, setSelectedCitizenDate] = useState("");
+    const [citizenAppointments, setCitizenAppointments] = useState([]);
+    const [requestUsageByDate, setRequestUsageByDate] = useState({});
 
     const { user } = useAuth();
     const isFuncionario = user.role === "funcionario";
@@ -82,6 +99,36 @@ const Petition = () => {
         } catch (error) {
             console.error("Error al obtener periodo activo:", error);
             setActivePeriod(null);
+        }
+    };
+
+    const fetchCitizenAppointments = async () => {
+        if (!isCiudadano) return;
+        try {
+            const result = await getAppointments();
+            if (!result.success) {
+                setCitizenAppointments([]);
+                return;
+            }
+            setCitizenAppointments(result.data || []);
+        } catch (error) {
+            console.error("Error al obtener inscripciones del ciudadano:", error);
+            setCitizenAppointments([]);
+        }
+    };
+
+    const fetchRequestDateUsage = async () => {
+        try {
+            const result = await getRequestDateUsage();
+            if (!result.success) return;
+
+            const usageMap = {};
+            (result.data || []).forEach((item) => {
+                usageMap[item.date] = Number(item.used || 0);
+            });
+            setRequestUsageByDate(usageMap);
+        } catch (error) {
+            console.error("Error al obtener uso por fecha de solicitudes:", error);
         }
     };
 
@@ -130,6 +177,8 @@ const Petition = () => {
     useEffect(() => {
         fetchPetitions();
         fetchActivePeriod();
+        fetchRequestDateUsage();
+        if (isCiudadano) fetchCitizenAppointments();
     }, []);
     /* eslint-enable react-hooks/exhaustive-deps */
 
@@ -140,6 +189,8 @@ const Petition = () => {
             const petitionId = Number(payload.petitionId);
 
             await loadSchedulesForPetition(petitionId);
+            await fetchRequestDateUsage();
+            if (isCiudadano) await fetchCitizenAppointments();
 
             // Si quieres refrescar tambiÃ©n la lista completa (mÃ¡s pesado), usa fetchPetitions()
             // await fetchPetitions();
@@ -150,7 +201,33 @@ const Petition = () => {
         return () => {
             socket.off("schedule:updated", handleScheduleUpdated);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isCiudadano]);
+
+    useEffect(() => {
+        const handleRequestUsageUpdated = async () => {
+            await fetchPetitions();
+            await fetchRequestDateUsage();
+        };
+
+        socket.on("request:usage-updated", handleRequestUsageUpdated);
+
+        return () => {
+            socket.off("request:usage-updated", handleRequestUsageUpdated);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        if (!selectedPetition) return;
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [selectedPetition]);
 
 
     const openViewSchedule = (petition) => {
@@ -159,7 +236,6 @@ const Petition = () => {
             ...petition,
             preferredDate: selectedCitizenDate || petition.preferredDate || rememberedDate || null,
         });
-        window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const handleViewPetitionDetails = async (petition) => {
@@ -232,6 +308,15 @@ const Petition = () => {
         return `${y}-${m}-${d}`;
     };
 
+    const getTomorrowLocalDate = () => {
+        const now = new Date();
+        now.setDate(now.getDate() + 1);
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, "0");
+        const d = String(now.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    };
+
     const isWeekendDate = (dateString) => {
         if (!dateString) return false;
         const [y, m, d] = String(dateString).split("-").map(Number);
@@ -243,26 +328,67 @@ const Petition = () => {
 
     const openAddDateSchedulesDialog = async (petition) => {
         const today = getTodayLocalDate();
-        const existingDates = [...new Set((schedulesByPetition[petition.id] || []).map((s) => s.date))].sort();
-        const existingDatesSet = new Set(existingDates);
-        const existingDatesText = existingDates.length > 0 ? existingDates.join(", ") : "Ninguna";
+        const tomorrow = getTomorrowLocalDate();
+        const allUsedDates = [...new Set((schedulesByPetition[petition.id] || []).map((s) => s.date))].sort();
+        const existingDatesSet = new Set(allUsedDates);
+        const blockedDates = [...allUsedDates];
 
         const { value: date } = await Swal.fire({
             title: `Agregar fecha - ${petition.name}`,
             html: `
                 <div class="text-left flex flex-col gap-2">
                     <label class="text-sm font-medium">Fecha</label>
-                    <input id="scheduleDate" type="date" min="${today}" class="swal2-input" value="${today}" />
-                    <p class="text-xs text-gray-500">
-                        Fechas ya creadas: ${existingDatesText}
+                    <input id="scheduleDatePicker" class="swal2-input m-0" placeholder="Selecciona una fecha" />
+                    <p class="text-xs text-gray-600">
+                        El calendario bloquea fechas usadas, pasadas y fines de semana.
                     </p>
                 </div>
             `,
             showCancelButton: true,
             confirmButtonText: "Continuar",
             cancelButtonText: "Cancelar",
+            didOpen: () => {
+                const input = document.getElementById("scheduleDatePicker");
+                if (!input) return;
+
+                flatpickr(input, {
+                    locale: Spanish,
+                    dateFormat: "Y-m-d",
+                    defaultDate: tomorrow,
+                    minDate: tomorrow,
+                    disableMobile: true,
+                    disable: [
+                        ...blockedDates,
+                        (dateObj) => {
+                            const day = dateObj.getDay();
+                            return day === 0 || day === 6;
+                        },
+                    ],
+                    onDayCreate: (_dObj, _dStr, _fp, dayElem) => {
+                        if (dayElem.classList.contains("flatpickr-disabled")) {
+                            const dateObj = dayElem.dateObj;
+                            const isWeekend = dateObj && (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+
+                            dayElem.style.textDecoration = "line-through";
+                            dayElem.style.opacity = "1";
+
+                            if (isWeekend) {
+                                dayElem.style.textDecorationColor = "#6b7280";
+                                dayElem.style.color = "#6b7280";
+                                dayElem.style.backgroundColor = "#f3f4f6";
+                                dayElem.style.borderColor = "#d1d5db";
+                            } else {
+                                dayElem.style.textDecorationColor = "#dc2626";
+                                dayElem.style.color = "#dc2626";
+                                dayElem.style.backgroundColor = "#fef2f2";
+                                dayElem.style.borderColor = "#fecaca";
+                            }
+                        }
+                    },
+                });
+            },
             preConfirm: () => {
-                const selectedDate = document.getElementById("scheduleDate")?.value;
+                const selectedDate = document.getElementById("scheduleDatePicker")?.value;
                 if (!selectedDate) {
                     Swal.showValidationMessage("Debes seleccionar una fecha");
                     return false;
@@ -271,12 +397,16 @@ const Petition = () => {
                     Swal.showValidationMessage("No puedes seleccionar una fecha pasada");
                     return false;
                 }
+                if (selectedDate <= today) {
+                    Swal.showValidationMessage("Solo puedes crear horarios desde el dia siguiente.");
+                    return false;
+                }
                 if (isWeekendDate(selectedDate)) {
                     Swal.showValidationMessage("No puedes seleccionar sabado o domingo. Elige un dia habil.");
                     return false;
                 }
                 if (existingDatesSet.has(selectedDate)) {
-                    Swal.showValidationMessage("Esa fecha ya existe. Usa la opciÃ³n Editar para modificar sus horarios.");
+                    Swal.showValidationMessage("Esa fecha ya fue usada en esta peticion. Elige otra fecha o usa Editar.");
                     return false;
                 }
                 return selectedDate;
@@ -293,13 +423,13 @@ const Petition = () => {
 
     const openEditDateSchedulesDialog = async (petition) => {
         const allSchedules = schedulesByPetition[petition.id] || [];
-        const dates = [...new Set(allSchedules.map((s) => s.date))].sort();
+        const dates = getRecentDateOptions(allSchedules);
 
         if (dates.length === 0) {
             Swal.fire({
                 icon: "info",
                 title: "Sin fechas",
-                text: "Esta peticion aun no tiene fechas con horarios.",
+                text: "Esta peticion aun no tiene fechas registradas.",
             });
             return;
         }
@@ -325,18 +455,22 @@ const Petition = () => {
     };
 
     const openSlotsSelectorDialog = async ({ petition, date, existing, requireAtLeastOne = true }) => {
-        const existingKeys = new Set(
-            existing.map((s) => slotKey(s.startTime.slice(0, 5), s.endTime.slice(0, 5)))
+        const existingMap = new Map(
+            existing.map((s) => [slotKey(s.startTime.slice(0, 5), s.endTime.slice(0, 5)), s])
         );
 
         const slotOptions = PREDEFINED_SLOTS.map(([startTime, endTime]) => {
             const key = slotKey(startTime, endTime);
-            const checked = existingKeys.has(key) ? "checked" : "";
+            const checked = existingMap.has(key) ? "checked" : "";
+            const existingSlot = existingMap.get(key);
+            const slotCapacity = Number(existingSlot?.slotCapacity ?? 2);
+            const slotRemaining = Number(existingSlot?.slotRemaining ?? slotCapacity);
 
             return `
                 <label class="text-sm border rounded-md px-2 py-1 flex items-center gap-2 bg-white hover:bg-gray-50">
                     <input type="checkbox" data-slot="${key}" ${checked} />
                     <span>${startTime} - ${endTime}</span>
+                    <span class="ml-auto text-xs text-gray-600">${slotRemaining}/${slotCapacity}</span>
                 </label>
             `;
         }).join("");
@@ -345,8 +479,22 @@ const Petition = () => {
             title: `Horarios (${date})`,
             html: `
                 <div class="text-left flex flex-col gap-2">
-                    <p class="text-sm text-gray-600">
-                        Marca para agregar y desmarca para quitar horarios de esta fecha.
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-sm text-gray-600">
+                            Marca para agregar y desmarca para quitar horarios de esta fecha.
+                        </p>
+                        <button
+                            type="button"
+                            id="toggleAllSlotsBtn"
+                            title="Marcar todo"
+                            aria-label="Marcar todo"
+                            class="shrink-0 rounded-md border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
+                        >
+                            <span id="toggleAllSlotsIcon" class="block"></span>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        Cupos por horario: disponible/maximo (ejemplo: 2/2).
                     </p>
                     <div class="grid grid-cols-2 gap-2">${slotOptions}</div>
                 </div>
@@ -355,6 +503,51 @@ const Petition = () => {
             showCancelButton: true,
             confirmButtonText: requireAtLeastOne ? "Crear" : "Guardar",
             cancelButtonText: "Cancelar",
+            didOpen: () => {
+                const popup = Swal.getPopup();
+                if (!popup) return;
+
+                const toggleButton = popup.querySelector("#toggleAllSlotsBtn");
+                const toggleIcon = popup.querySelector("#toggleAllSlotsIcon");
+                const checkboxes = Array.from(popup.querySelectorAll("input[data-slot]"));
+
+                if (!toggleButton || !toggleIcon || checkboxes.length === 0) return;
+
+                const checkedSvg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <path d="M8 12l3 3 5-6"></path>
+                    </svg>
+                `;
+
+                const uncheckedSvg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    </svg>
+                `;
+
+                const updateToggleLabel = () => {
+                    const checkedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+                    const allChecked = checkedCount === checkboxes.length;
+                    toggleIcon.innerHTML = allChecked ? checkedSvg : uncheckedSvg;
+                    toggleButton.title = allChecked ? "Desmarcar todo" : "Marcar todo";
+                    toggleButton.setAttribute("aria-label", allChecked ? "Desmarcar todo" : "Marcar todo");
+                };
+
+                toggleButton.addEventListener("click", () => {
+                    const shouldCheckAll = checkboxes.some((checkbox) => !checkbox.checked);
+                    checkboxes.forEach((checkbox) => {
+                        checkbox.checked = shouldCheckAll;
+                    });
+                    updateToggleLabel();
+                });
+
+                checkboxes.forEach((checkbox) => {
+                    checkbox.addEventListener("change", updateToggleLabel);
+                });
+
+                updateToggleLabel();
+            },
             preConfirm: () => {
                 const checked = Array.from(document.querySelectorAll("input[data-slot]:checked"))
                     .map((el) => el.getAttribute("data-slot"));
@@ -424,7 +617,7 @@ const Petition = () => {
                     .map((r) => r.reason?.message),
             ].filter(Boolean);
 
-            const detail = failureMessages[0] || "No se pudo aplicar uno o mÃ¡s cambios.";
+            const detail = failureMessages[0] || "No se pudo aplicar uno o mas cambios.";
             const isPastDateError = /fecha pasada/i.test(detail);
 
             Swal.fire({
@@ -455,8 +648,9 @@ const Petition = () => {
 
     const getRowInfo = (petition) => {
         const allSchedules = schedulesByPetition[petition.id] || [];
-        const dates = [...new Set(allSchedules.map((s) => s.date))].sort();
-        const selectedDate = selectedDateByPetition[petition.id] || dates[0] || null;
+        const dates = getRecentDateOptions(allSchedules);
+        const selectedStoredDate = selectedDateByPetition[petition.id];
+        const selectedDate = (selectedStoredDate && dates.includes(selectedStoredDate)) ? selectedStoredDate : (dates[0] || null);
         const daySchedules = selectedDate
             ? allSchedules
                 .filter((s) => s.date === selectedDate)
@@ -467,7 +661,10 @@ const Petition = () => {
         const selectedSchedule = daySchedules.find((s) => s.id === selectedScheduleId) || null;
         const effectiveSelectedSchedule = selectedSchedule || daySchedules[0] || null;
 
-        const availableCount = daySchedules.filter((s) => s.status === "disponible").length;
+        const availableCount = daySchedules.reduce(
+            (acc, s) => acc + Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0)),
+            0
+        );
         const globalQuota = getGlobalQuotaByDate(selectedDate);
         const petitionQuota = getPetitionQuotaByDate(petition, selectedDate);
         const effectiveAvailable = Math.min(availableCount, petitionQuota.available);
@@ -610,32 +807,41 @@ const Petition = () => {
         }
 
         const allSchedules = Object.values(schedulesByPetition).flat();
-        const occupiedSchedules = allSchedules.filter(
-            (s) => s.date === date && (s.status === "pendiente" || s.status === "tomada")
-        );
-        const uniqueOccupiedSlots = new Set(
-            occupiedSchedules.map((s) => `${s.date}|${s.startTime}|${s.endTime}`)
-        ).size;
+        const daySchedules = allSchedules.filter((s) => s.date === date);
+        const slotUsageByKey = new Map();
+
+        daySchedules.forEach((s) => {
+            const key = `${s.date}|${s.startTime}|${s.endTime}`;
+            if (!slotUsageByKey.has(key)) {
+                slotUsageByKey.set(key, Number(s.slotUsed || 0));
+            }
+        });
+
+        const totalUsed = Array.from(slotUsageByKey.values()).reduce((acc, value) => acc + value, 0);
+        const requestUsed = Number(requestUsageByDate[date] || 0);
 
         return {
-            available: Math.max(0, GLOBAL_DAILY_QUOTA - uniqueOccupiedSlots),
+            available: Math.max(0, GLOBAL_DAILY_QUOTA - (totalUsed + requestUsed)),
             max: GLOBAL_DAILY_QUOTA,
         };
     };
 
     const getPetitionQuotaByDate = (petition, date) => {
         const petitionSchedules = schedulesByPetition[petition.id] || [];
-        const petitionQuota = petitionSchedules.filter((s) => s.date === date).length;
+        const daySchedules = petitionSchedules.filter((s) => s.date === date);
+        const petitionQuota = daySchedules.length;
         if (!date) {
             return { available: petitionQuota, max: petitionQuota };
         }
-        const occupied = petitionSchedules.filter(
-            (s) => s.date === date && (s.status === "pendiente" || s.status === "tomada")
-        ).length;
+        const available = daySchedules.reduce(
+            (acc, s) => acc + Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0)),
+            0
+        );
+        const max = daySchedules.reduce((acc, s) => acc + Number(s.slotCapacity ?? 1), 0);
 
         return {
-            available: Math.max(0, petitionQuota - occupied),
-            max: petitionQuota,
+            available: Math.max(0, available),
+            max: max || petitionQuota,
         };
     };
 
@@ -657,9 +863,9 @@ const Petition = () => {
                 : (dates[0] || null);
         const globalQuota = getGlobalQuotaByDate(targetDate);
         const petitionQuota = getPetitionQuotaByDate(petition, targetDate);
-        const availableSchedules = petitionSchedules.filter(
-            (s) => s.date === targetDate && s.status === "disponible"
-        ).length;
+        const availableSchedules = petitionSchedules
+            .filter((s) => s.date === targetDate)
+            .reduce((acc, s) => acc + Number(s.slotRemaining ?? (s.status === "disponible" ? 1 : 0)), 0);
 
         return {
             available: Math.min(availableSchedules, petitionQuota.available),
@@ -690,6 +896,13 @@ const Petition = () => {
         return schedules.some((s) => s.date === selectedCitizenDate);
     });
     const isCitizenPeriodClosed = isCiudadano && !activePeriod;
+
+    const hasActiveCitizenAppointmentInPetition = (petitionId) =>
+        citizenAppointments.some(
+            (appointment) =>
+                Number(appointment?.petitionId) === Number(petitionId) &&
+                ["pendiente", "aprobado"].includes(appointment?.status)
+        );
 
     const globalDateQuotaMap = Object.fromEntries(
         availableDatesForFilter.map((dateValue) => {
@@ -733,8 +946,8 @@ const Petition = () => {
                                             </p>
                                         )}
                                     </div>
-                                </div>
-                            )}
+                </div>
+            )}
 
                             {(isCiudadano || isSupervisor) && (
                                 <div className="border rounded-lg px-3 py-2 bg-white min-w-[220px]">
@@ -753,8 +966,8 @@ const Petition = () => {
                                             </option>
                                         ))}
                                     </select>
-                                </div>
-                            )}
+                </div>
+            )}
 
                             {isFuncionario && (
                                 <div className="flex items-start gap-3">
@@ -766,24 +979,24 @@ const Petition = () => {
                                             <p className="text-xs text-amber-800">
                                                 No puedes crear, editar ni eliminar peticiones u horarios mientras exista un periodo activo.
                                             </p>
-                                        </div>
-                                    )}
+                </div>
+            )}
 
                                     <button
                                         onClick={handleCreate}
                                         disabled={isFuncionarioLockedByActivePeriod}
                                         title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un perÃ­odo activo" : ""}
-                                        className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                                        className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
                                             isFuncionarioLockedByActivePeriod
                                                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                                                : "bg-blue-700 text-white hover:bg-blue-800"
+                                                : "bg-blue-700 text-white hover:bg-blue-800 hover:shadow-md active:scale-95"
                                         }`}
                                     >
                                         <PlusCircle className="h-4 w-4" />
                                         Nueva Peticion
                                     </button>
-                                </div>
-                            )}
+                </div>
+            )}
                         </div>
                     </div>
 
@@ -885,10 +1098,10 @@ const Petition = () => {
                                                             className={`px-3 py-1.5 text-xs border rounded-md ${
                                                                 isFuncionarioLockedByActivePeriod
                                                                     ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
-                                                                    : "text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                                                                    : "text-indigo-800 border-indigo-200 bg-indigo-100 hover:bg-indigo-200"
                                                             }`}
                                                         >
-                                                            Horas
+                                                            Fecha y Hora
                                                         </button>
                                                         <button
                                                             onClick={() => handleEdit(petition)}
@@ -897,7 +1110,7 @@ const Petition = () => {
                                                             className={`px-3 py-1.5 text-xs border rounded-md ${
                                                                 isFuncionarioLockedByActivePeriod
                                                                     ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
-                                                                    : "text-blue-700 border-blue-200 hover:bg-blue-50"
+                                                                    : "text-blue-800 border-blue-200 bg-blue-100 hover:bg-blue-200"
                                                             }`}
                                                         >
                                                             Editar
@@ -909,7 +1122,7 @@ const Petition = () => {
                                                             className={`px-3 py-1.5 text-xs border rounded-md ${
                                                                 isFuncionarioLockedByActivePeriod
                                                                     ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
-                                                                    : "text-red-700 border-red-200 hover:bg-red-50"
+                                                                    : "text-red-800 border-red-200 bg-red-100 hover:bg-red-200"
                                                             }`}
                                                         >
                                                             Eliminar
@@ -921,8 +1134,8 @@ const Petition = () => {
                                     })}
                                 </tbody>
                             </table>
-                        </div>
-                    )}
+                </div>
+            )}
 
                     {!loading && petitions.length > 0 && !isFuncionario && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -935,15 +1148,21 @@ const Petition = () => {
                                         petitionDateOptions[0] ||
                                         "";
                                     const quotaInfo = getCitizenQuotaInfo(petition, localSelectedDate);
+                                    const hasOwnAppointmentInPetition = isCiudadano && hasActiveCitizenAppointmentInPetition(petition.id);
                                     const isDateQuotaClosed = isCiudadano && Number(quotaInfo?.globalAvailable ?? 0) <= 0;
                                     const isHoursClosed = isCiudadano && !isDateQuotaClosed && Number(quotaInfo?.available ?? 0) <= 0;
-                                    const selectLabel = isCitizenPeriodClosed
-                                        ? "Periodo cerrado"
-                                        : isDateQuotaClosed
-                                            ? "Sin cupos"
-                                            : isHoursClosed
-                                                ? "Sin horas"
-                                                : "Ver horarios";
+                                    const shouldAlertOwnAppointment =
+                                        hasOwnAppointmentInPetition &&
+                                        (isDateQuotaClosed || isCitizenPeriodClosed);
+                                    const selectLabel = hasOwnAppointmentInPetition
+                                        ? "Con cupo"
+                                        : isCitizenPeriodClosed
+                                            ? "Periodo cerrado"
+                                            : isDateQuotaClosed
+                                                ? "Sin cupos"
+                                                : isHoursClosed
+                                                    ? "Sin horas"
+                                                    : "Ver horarios";
 
                                     return (
                                 <PetitionCard
@@ -955,15 +1174,34 @@ const Petition = () => {
                                     onDateChange={selectedCitizenDate ? null : handleCitizenCardDateChange}
                                     onView={handleViewPetitionDetails}
                                     onSelect={openViewSchedule}
-                                    selectBlocked={isCitizenPeriodClosed || isDateQuotaClosed}
-                                    selectDanger={isHoursClosed}
+                                    selectBlocked={shouldAlertOwnAppointment || (!hasOwnAppointmentInPetition && (isCitizenPeriodClosed || isDateQuotaClosed || isHoursClosed))}
+                                    selectDanger={!hasOwnAppointmentInPetition && isHoursClosed}
+                                    selectSuccess={hasOwnAppointmentInPetition}
                                     selectLabel={selectLabel}
                                     onBlockedSelect={() => {
+                                        if (shouldAlertOwnAppointment) {
+                                            return Swal.fire({
+                                                icon: "info",
+                                                title: "Ya tienes una hora tomada",
+                                                text: "Revisala en Mis inscripciones.",
+                                                confirmButtonText: "Entendido",
+                                            });
+                                        }
+
                                         if (isCitizenPeriodClosed) {
                                             return Swal.fire({
                                                 icon: "warning",
                                                 title: "Periodo cerrado",
                                                 text: "Solo puedes tomar horas cuando el periodo este activo.",
+                                                confirmButtonText: "Entendido",
+                                            });
+                                        }
+
+                                        if (isHoursClosed) {
+                                            return Swal.fire({
+                                                icon: "warning",
+                                                title: "Sin horas disponibles",
+                                                text: "No quedan horarios disponibles para esta fecha.",
                                                 confirmButtonText: "Entendido",
                                             });
                                         }
@@ -979,8 +1217,8 @@ const Petition = () => {
                                     );
                                 })()
                             ))}
-                        </div>
-                    )}
+                </div>
+            )}
 
                     {!loading && !isFuncionario && petitions.length > 0 && visiblePetitionsForCitizen.length === 0 && (
                         <p className="text-sm text-gray-500 italic">
@@ -990,30 +1228,34 @@ const Petition = () => {
                 </div>
             </div>
 
-            {!isFuncionario && selectedPetition && (
-                <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center">
-                    <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-xl border shadow-xl p-4 md:p-5">
-                        <div className="flex justify-between items-start gap-4 mb-4">
-                            <div>
-                                <h2 className="font-semibold text-lg">Ver horarios</h2>
-                                <p className="text-sm text-gray-600">{selectedPetition.name}</p>
+            {!isFuncionario && selectedPetition && createPortal(
+                <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto">
+                    <div className="min-h-screen w-full flex items-center justify-center p-4">
+                        <div className="w-full max-w-6xl bg-white rounded-xl border shadow-xl p-4 md:p-5">
+                            <div className="flex justify-between items-start gap-4 mb-4">
+                                <div>
+                                    <h2 className="font-semibold text-lg">Ver horarios</h2>
+                                    <p className="text-sm text-gray-600">{selectedPetition.name}</p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedPetition(null)}
+                                    className="text-sm text-gray-600 hover:text-gray-900 border rounded-md px-3 py-1.5"
+                                >
+                                    Cerrar
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setSelectedPetition(null)}
-                                className="text-sm text-gray-600 hover:text-gray-900 border rounded-md px-3 py-1.5"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
 
-                        <PetitionSchedule
-                            petitionId={selectedPetition.id}
-                            preferredDate={selectedPetition.preferredDate || null}
-                            globalDateQuotaMap={globalDateQuotaMap}
-                            onDateChange={(dateValue) => handleCitizenPetitionDateChange(selectedPetition.id, dateValue)}
-                        />
+                            <PetitionSchedule
+                                petitionId={selectedPetition.id}
+                                preferredDate={selectedPetition.preferredDate || null}
+                                globalDateQuotaMap={globalDateQuotaMap}
+                                onDateChange={(dateValue) => handleCitizenPetitionDateChange(selectedPetition.id, dateValue)}
+                                onCloseRequested={() => setSelectedPetition(null)}
+                            />
+                        </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -1091,3 +1333,14 @@ async function petitionDialog(existingPetition = null) {
 
     return formValues || null;
 }
+
+
+
+
+
+
+
+
+
+
+

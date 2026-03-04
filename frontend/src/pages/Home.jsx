@@ -161,7 +161,7 @@ const Home = () => {
                                 <img
                                     src="/logo-escudo.png"
                                     alt="Escudo Municipalidad"
-                                    className="h-full w-full object-contain drop-shadow-md"
+                                    className="h-full w-full object-contain drop-shadow-md transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:drop-shadow-lg"
                                 />
                             </div>
 
@@ -188,7 +188,7 @@ const Home = () => {
                             <img
                                 src="/logo-municipalidad.png"
                                 alt="Logo Municipalidad de Santa Juana"
-                                className="max-h-24 md:max-h-28 w-auto object-contain drop-shadow-md"
+                                className="max-h-24 md:max-h-28 w-auto object-contain drop-shadow-md transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:drop-shadow-lg"
                             />
                         </div>
                     </div>
