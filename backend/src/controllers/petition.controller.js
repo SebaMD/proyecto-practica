@@ -8,7 +8,7 @@ import {
     deletePetitionService,
     getPetitionByIdService,
     getPetitionsService,
-    updatePetitionService 
+    updatePetitionService
 } from "../services/petition.service.js";
 import { checkActivePeriodService } from "../services/period.service.js";
 

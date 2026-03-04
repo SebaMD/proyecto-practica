@@ -9,6 +9,8 @@ import {
     deleteAppointmentId,
     updateStatus,
     getPetitionsByPrerequisites,
+    exportAppointmentsReport,
+    getSupervisorReportDates,
 } from "../controllers/appointment.controller.js";
 
 const router = Router();
@@ -16,6 +18,8 @@ const router = Router();
 router.use(authenticateJwt);
 
 router.get("/", verifyRoles(["supervisor", "ciudadano"]), getAppointment); 
+router.get("/export", verifyRoles(["supervisor"]), exportAppointmentsReport);
+router.get("/export/dates", verifyRoles(["supervisor"]), getSupervisorReportDates);
 router.get("/filter", verifyRoles(["ciudadano", "supervisor"]), getPetitionsByPrerequisites);
 
 router.get("/:id", verifyRoles(["ciudadano"]), getAppointmentId);

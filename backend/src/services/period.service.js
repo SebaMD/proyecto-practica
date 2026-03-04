@@ -1,6 +1,6 @@
 import { AppDataSource } from "../config/configDb.js";
 import { Period } from "../entities/period.entity.js";
-import { LessThanOrEqual, MoreThanOrEqual, Not } from "typeorm";
+import { LessThan, LessThanOrEqual, MoreThanOrEqual, Not } from "typeorm";
 
 export async function createPeriodService(data){
     const periodRepository = AppDataSource.getRepository(Period);
@@ -65,6 +65,20 @@ export async function checkPeriodOverlapService(fechaInicio, fechaCierre, exclud
     });
 }
 
+
+export async function getLatestClosedPeriodService() {
+    const periodRepository = AppDataSource.getRepository(Period);
+    const now = new Date();
+
+    return await periodRepository.findOne({
+        where: {
+            closingDate: LessThan(now),
+        },
+        order: {
+            closingDate: "DESC",
+        },
+    });
+}
 export async function checkActivePeriodService() {
     const periodRepository = AppDataSource.getRepository(Period);
     const now = new Date();

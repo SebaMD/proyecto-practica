@@ -1,58 +1,156 @@
 import { AppDataSource } from "../config/configDb.js";
 import { Request } from "../entities/request.entity.js";
 import { User } from "../entities/user.entity.js";
-import { In, Between } from "typeorm";
+import { Petition } from "../entities/petition.entity.js";
+import { In } from "typeorm";
+import { Appointment } from "../entities/appointment.entity.js";
+import { PetitionSchedule } from "../entities/petitionSchedule.entity.js";
 
-const GLOBAL_RENEWAL_DAILY_QUOTA = 10;
+const GLOBAL_DAILY_QUOTA = 15;
+const SLOT_CAPACITY = 2;
+const PICKUP_SLOTS = [
+    ["08:00", "08:30"],
+    ["08:30", "09:00"],
+    ["09:00", "09:30"],
+    ["09:30", "10:00"],
+    ["10:00", "10:30"],
+    ["10:30", "11:00"],
+    ["11:00", "11:30"],
+    ["11:30", "12:00"],
+    ["12:00", "12:30"],
+    ["12:30", "13:00"],
+];
 
-function getTodayRange() {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-
-    return { start, end };
+function toMinutes(time) {
+    const [h = 0, m = 0] = String(time || "00:00").split(":").map(Number);
+    return (h * 60) + m;
 }
 
-export async function getRenewalQuotaService() {
-    const requestRepository = AppDataSource.getRepository(Request);
-    const { start, end } = getTodayRange();
+function add30Minutes(time) {
+    const total = toMinutes(time) + 30;
+    const hh = String(Math.floor(total / 60)).padStart(2, "0");
+    const mm = String(total % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+}
 
-    const used = await requestRepository.count({
-        where: [
-            { status: "pendiente", createdAt: Between(start, end) },
-            { status: "aprobado", createdAt: Between(start, end) },
-        ],
+function getConsumedDateForRequest(request) {
+    if (!request) return null;
+    if (request.status === "aprobado" && request.pickupDate) return request.pickupDate;
+    return request.requestDate;
+}
+
+function getSlotKey(date, startTime, endTime) {
+    return `${date}|${startTime}|${endTime}`;
+}
+
+export async function getPickupAvailabilityByDateService(date, citizenId = null) {
+    const appointmentRepository = AppDataSource.getRepository(Appointment);
+    const requestRepository = AppDataSource.getRepository(Request);
+    const normalizedCitizenId = citizenId ? Number(citizenId) : null;
+
+    const occupancy = new Map();
+    const blockedForCitizen = new Set();
+
+    const activeAppointments = await appointmentRepository.find({
+        where: {
+            status: In(["pendiente", "aprobado"]),
+        },
+        relations: {
+            schedule: true,
+        },
     });
 
-    return {
-        used,
-        available: Math.max(0, GLOBAL_RENEWAL_DAILY_QUOTA - used),
-        max: GLOBAL_RENEWAL_DAILY_QUOTA,
-    };
+    for (const appointment of activeAppointments) {
+        const schedule = appointment?.schedule;
+        if (!schedule || schedule.date !== date) continue;
+        const startTime = String(schedule.startTime).slice(0, 5);
+        const endTime = String(schedule.endTime).slice(0, 5);
+        const key = getSlotKey(date, startTime, endTime);
+        occupancy.set(key, Number(occupancy.get(key) || 0) + 1);
+
+        if (normalizedCitizenId && Number(appointment.userId) === normalizedCitizenId) {
+            blockedForCitizen.add(key);
+        }
+    }
+
+    if (normalizedCitizenId) {
+        const approvedRequests = await requestRepository.find({
+            where: {
+                citizenId: normalizedCitizenId,
+                status: "aprobado",
+            },
+            select: ["pickupDate", "pickupTime"],
+        });
+
+        for (const request of approvedRequests) {
+            if (!request?.pickupDate || !request?.pickupTime) continue;
+            if (String(request.pickupDate) !== String(date)) continue;
+
+            const startTime = String(request.pickupTime).slice(0, 5);
+            const endTime = add30Minutes(startTime);
+            blockedForCitizen.add(getSlotKey(date, startTime, endTime));
+        }
+    }
+
+    return PICKUP_SLOTS.map(([startTime, endTime]) => {
+        const key = getSlotKey(date, startTime, endTime);
+        const used = Number(occupancy.get(key) || 0);
+        const remaining = Math.max(0, SLOT_CAPACITY - used);
+        const isBlockedForCitizen = blockedForCitizen.has(key);
+        return {
+            date,
+            startTime,
+            endTime,
+            used,
+            slotCapacity: SLOT_CAPACITY,
+            slotRemaining: remaining,
+            available: remaining > 0 && !isBlockedForCitizen,
+            blockedForCitizen: isBlockedForCitizen,
+        };
+    });
 }
 
 async function attachCitizenData(requests) {
     if (!Array.isArray(requests) || requests.length === 0) return requests;
 
     const citizenIds = [...new Set(requests.map((r) => r.citizenId).filter(Boolean))];
-    if (citizenIds.length === 0) return requests;
+    const reviewerIds = [...new Set(requests.map((r) => r.reviewerId).filter(Boolean))];
+    const petitionIds = [...new Set(requests.map((r) => r.petitionId).filter(Boolean))];
 
     const userRepository = AppDataSource.getRepository(User);
-    const users = await userRepository.find({
-        where: {
-            id: In(citizenIds),
-        },
-    });
+    const petitionRepository = AppDataSource.getRepository(Petition);
+
+    const allUserIds = [...new Set([...citizenIds, ...reviewerIds])];
+    const users = allUserIds.length > 0
+        ? await userRepository.find({
+            where: {
+                id: In(allUserIds),
+            },
+        })
+        : [];
 
     const userMap = new Map(
         users.map((u) => [u.id, { id: u.id, username: u.username, email: u.email, rut: u.rut }])
     );
 
+    const petitions = petitionIds.length > 0
+        ? await petitionRepository.find({
+            where: {
+                id: In(petitionIds),
+            },
+            select: ["id", "name"],
+        })
+        : [];
+
+    const petitionMap = new Map(
+        petitions.map((p) => [p.id, { id: p.id, name: p.name }])
+    );
+
     return requests.map((request) => ({
         ...request,
         citizen: userMap.get(request.citizenId) || null,
+        reviewer: userMap.get(request.reviewerId) || null,
+        petition: petitionMap.get(request.petitionId) || null,
     }));
 }
 
@@ -60,6 +158,64 @@ export async function createRequestService(data) {
     const requestRepository = AppDataSource.getRepository(Request);
     const newRequest = requestRepository.create(data);
     return await requestRepository.save(newRequest);
+}
+
+export async function countGlobalUsedForDateService(date) {
+    if (!date) return 0;
+
+    const appointmentRepository = AppDataSource.getRepository(Appointment);
+    const requestRepository = AppDataSource.getRepository(Request);
+    const activeAppointments = await appointmentRepository.find({
+        where: {
+            status: In(["pendiente", "aprobado"]),
+        },
+        relations: {
+            schedule: true,
+        },
+    });
+
+    const appointmentsUsed = activeAppointments.filter(
+        (appointment) => appointment?.schedule?.date === date
+    ).length;
+
+    const activeRequests = await requestRepository.find({
+        where: {
+            status: In(["pendiente", "aprobado"]),
+        },
+        select: ["status", "requestDate", "pickupDate"],
+    });
+
+    const activeRequestsUsed = activeRequests.filter(
+        (request) => getConsumedDateForRequest(request) === date
+    ).length;
+
+    return appointmentsUsed + activeRequestsUsed;
+}
+
+export async function getRequestDateUsageService() {
+    const requestRepository = AppDataSource.getRepository(Request);
+    const pendingRequests = await requestRepository.find({
+        where: {
+            status: "pendiente",
+        },
+        select: ["requestDate"],
+    });
+
+    const usage = {};
+    pendingRequests.forEach((request) => {
+        const date = request?.requestDate;
+        if (!date) return;
+        usage[date] = Number(usage[date] || 0) + 1;
+    });
+
+    const response = Object.entries(usage).map(([date, used]) => ({
+        date,
+        used,
+        available: Math.max(0, GLOBAL_DAILY_QUOTA - used),
+        max: GLOBAL_DAILY_QUOTA,
+    }));
+
+    return response.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getRequestsService() {
@@ -107,8 +263,85 @@ export async function reviewRequestService(id, data) {
     }
 
     if (data.status === "aprobado") {
-        request.pickupDate = data.pickupDate;
-        request.pickupTime = data.pickupTime;
+        const pickupDate = data.pickupDate;
+        const pickupTime = data.pickupTime;
+        const pickupEndTime = add30Minutes(pickupTime);
+        const appointmentRepository = AppDataSource.getRepository(Appointment);
+        const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
+        if (request.requestDate && pickupDate !== request.requestDate) {
+            throw new Error("La fecha de retiro debe coincidir con la fecha solicitada por el ciudadano");
+        }
+
+        const existingSchedule = await scheduleRepository.findOne({
+            where: {
+                petitionId: request.petitionId,
+                date: pickupDate,
+                startTime: pickupTime,
+                endTime: pickupEndTime,
+            },
+        });
+        if (!existingSchedule) {
+            throw new Error("La hora seleccionada no existe en la peticion para esa fecha");
+        }
+
+        const globalUsed = await countGlobalUsedForDateService(pickupDate);
+        if (globalUsed >= GLOBAL_DAILY_QUOTA) {
+            throw new Error(`No hay cupos disponibles para la fecha ${pickupDate}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`);
+        }
+
+        const activeAppointments = await appointmentRepository.find({
+            where: {
+                status: In(["pendiente", "aprobado"]),
+            },
+            relations: {
+                schedule: true,
+            },
+        });
+
+        const occupiedCount = activeAppointments.filter((appointment) => {
+            const schedule = appointment?.schedule;
+            if (!schedule) return false;
+            if (schedule.date !== pickupDate) return false;
+
+            const start = String(schedule.startTime).slice(0, 5);
+            const end = String(schedule.endTime).slice(0, 5);
+            return start === pickupTime && end === pickupEndTime;
+        }).length;
+
+        if (occupiedCount >= SLOT_CAPACITY) {
+            throw new Error("Ese horario ya fue tomado por una inscripcion");
+        }
+
+        const sameCitizenAppointment = activeAppointments.some((appointment) => {
+            const schedule = appointment?.schedule;
+            if (!schedule) return false;
+            if (Number(appointment.userId) !== Number(request.citizenId)) return false;
+            if (schedule.date !== pickupDate) return false;
+
+            const start = String(schedule.startTime).slice(0, 5);
+            const end = String(schedule.endTime).slice(0, 5);
+            return start === pickupTime && end === pickupEndTime;
+        });
+
+        if (sameCitizenAppointment) {
+            throw new Error("El ciudadano ya tiene una cita asignada en ese mismo horario");
+        }
+
+        const sameCitizenApprovedRequest = await requestRepository.findOne({
+            where: {
+                citizenId: request.citizenId,
+                status: "aprobado",
+                pickupDate,
+                pickupTime,
+            },
+        });
+
+        if (sameCitizenApprovedRequest) {
+            throw new Error("El ciudadano ya tiene una cita asignada en ese mismo horario");
+        }
+
+        request.pickupDate = pickupDate;
+        request.pickupTime = pickupTime;
     }
 
     const savedRequest = await requestRepository.save(request);

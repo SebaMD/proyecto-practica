@@ -16,7 +16,10 @@ import {
     hasAppointmentToPetitionService, 
     getPetitionsByPrerequisitesService 
 } from "../services/appointment.service.js";
-import { getPetitionsService } from "../services/petition.service.js";
+import {
+    generateAppointmentsReportService,
+    getSupervisorReportDatesService,
+} from "../services/report.service.js";
 import jwt from "jsonwebtoken";
 
 import { checkActivePeriodService } from "../services/period.service.js";
@@ -49,6 +52,16 @@ export async function createAppointment(req, res){
 
         handleSuccess(res, 201, "Inscripcion creada exitosamente", newAppointment);
     } catch (error) {
+        const knownBusinessError =
+            error.message?.includes("Ya tienes") ||
+            error.message?.includes("No hay cupos disponibles") ||
+            error.message?.includes("maximo de") ||
+            error.message?.includes("no esta disponible");
+
+        if (knownBusinessError) {
+            return handleErrorClient(res, 409, error.message);
+        }
+
         handleErrorServer(res, 500, "Error al crear la solicitud", error.message);
     }
 }
@@ -220,3 +233,75 @@ export async function getAppointmentsByPetition(req, res){
         );
     }
 }
+
+export async function exportAppointmentsReport(req, res) {
+    try {
+        const { date } = req.query;
+
+        if (!date) {
+            return handleErrorClient(res, 400, "La fecha es obligatoria");
+        }
+
+        const authHeader = req.headers["authorization"];
+        if (!authHeader) return handleErrorClient(res, 401, "Token no proporcionado");
+
+        const token = authHeader.split(" ")[1];
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
+
+        const workbook = await generateAppointmentsReportService(payload.id, date);
+
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename=mis-revisiones-${date}.xlsx`
+        );
+
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+            return handleErrorClient(res, 403, error.message);
+        }
+        if (
+            error.message?.includes("No existe un periodo cerrado para exportar") ||
+            error.message?.includes("La fecha no pertenece al ultimo periodo cerrado") ||
+            error.message?.includes("No hay citas aprobadas para esa fecha") ||
+            error.message?.includes("No hay citas revisadas para esa fecha")
+        ) {
+            return handleErrorClient(res, 404, error.message);
+        }
+        handleErrorServer(res, 500, "Error al exportar el reporte", error.message);
+    }
+}
+
+export async function getSupervisorReportDates(req, res) {
+    try {
+        const authHeader = req.headers["authorization"];
+        if (!authHeader) return handleErrorClient(res, 401, "Token no proporcionado");
+
+        const token = authHeader.split(" ")[1];
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
+
+        const dates = await getSupervisorReportDatesService(payload.id);
+        handleSuccess(
+            res,
+            200,
+            dates.length > 0
+                ? "Fechas de reporte obtenidas exitosamente"
+                : "No hay fechas disponibles para exportar en el ultimo periodo cerrado",
+            dates
+        );
+    } catch (error) {
+        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+            return handleSuccess(res, 200, "Exportacion bloqueada mientras el periodo este activo", []);
+        }
+        if (error.message?.includes("No existe un periodo cerrado para exportar")) {
+            return handleSuccess(res, 200, "No hay periodos cerrados para exportar", []);
+        }
+        handleErrorServer(res, 500, "Error al obtener fechas de reporte", error.message);
+    }
+}
+

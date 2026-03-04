@@ -24,14 +24,14 @@ export const PetitionSchedule = new EntitySchema({
             type: "time",
             nullable: false,
         },
+        endTime: {
+            type: "time",
+            nullable: false,
+        },
         status: {
             type: "enum",
             enum: ["disponible", "pendiente", "tomada"],
             default: "disponible",
-            nullable: false,
-        },
-        endTime: {
-            type: "time",
             nullable: false,
         },
         createdAt: {

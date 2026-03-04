@@ -14,6 +14,13 @@ export const createRequestBodyValidation = Joi.object({
         "string.min": "La descripcion debe contener al menos 5 caracteres.",
         "string.max": "La descripcion puede contener hasta 300 caracteres.",
     }),
+    requestDate: Joi.string()
+        .pattern(/^\d{4}-\d{2}-\d{2}$/)
+        .required()
+        .messages({
+            "any.required": "La fecha de solicitud es obligatoria.",
+            "string.pattern.base": "La fecha de solicitud debe tener formato YYYY-MM-DD.",
+        }),
 })
 .unknown(false)
 .options({ abortEarly: false })

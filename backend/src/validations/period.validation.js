@@ -32,3 +32,17 @@ export const periodBodyValidation = Joi.object({
 .messages({
     "object.unknown": "No se permiten propiedades adicionales.",
 });
+
+export const periodActiveUpdateValidation = Joi.object({
+    closingDate: Joi.date()
+        .iso()
+        .required()
+        .messages({
+            "date.base": "La fecha de cierre debe ser una fecha valida (ISO).",
+            "any.required": "La fecha de cierre es obligatoria.",
+        }),
+})
+    .unknown(false)
+    .messages({
+        "object.unknown": "Solo se permite modificar la fecha de termino del periodo activo.",
+    });

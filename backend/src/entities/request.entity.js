@@ -19,6 +19,11 @@ export const Request = new EntitySchema({
             type: "int",
             nullable: false,
         },
+        requestDate: {
+            type: "varchar",
+            length: 10,
+            nullable: true,
+        },
         description: {
             type: "varchar",
             length: 300,

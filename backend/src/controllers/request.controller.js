@@ -9,24 +9,32 @@ import {
     getRequestByIdService,
     reviewRequestService,
     hasRequestOfPetitionService,
-    getRenewalQuotaService,
     cancelPendingRequestByCitizenService,
+    countGlobalUsedForDateService,
+    getRequestDateUsageService,
+    getPickupAvailabilityByDateService,
 } from "../services/request.service.js";
 import {
     createRequestBodyValidation,
     reviewRequestValidation,
 } from "../validations/request.validation.js";
+import {
+    generateRequestsReportService,
+    getRequestReportDatesService,
+} from "../services/report.service.js";
 import jwt from "jsonwebtoken";
 import { checkActivePeriodService } from "../services/period.service.js";
 import { getIO } from "../socket.js";
 
-const emitRenewalQuotaUpdated = async () => {
+const GLOBAL_DAILY_QUOTA = 15;
+
+const emitRequestUsageUpdated = async () => {
     try {
         const io = getIO();
-        const quota = await getRenewalQuotaService();
-        io.emit("renewal:quota-updated", quota);
+        const usage = await getRequestDateUsageService();
+        io.emit("request:usage-updated", usage);
     } catch (error) {
-        console.error("Socket emit error (renewal:quota-updated):", error.message);
+        console.error("Socket emit error (request:usage-updated):", error.message);
     }
 };
 
@@ -54,18 +62,17 @@ export async function createRequest(req, res) {
         if (hasRequest) {
             return handleErrorClient(res, 409, "Ya existe una solicitud activa o aprobada para la peticion indicada");
         }
-
-        const quota = await getRenewalQuotaService();
-        if (quota.available <= 0) {
+        const globalUsed = await countGlobalUsedForDateService(body.requestDate);
+        if (globalUsed >= GLOBAL_DAILY_QUOTA) {
             return handleErrorClient(
                 res,
                 409,
-                `No hay cupos de renovacion disponibles hoy. Intenta nuevamente manana (maximo diario: ${quota.max}).`
+                `No hay cupos disponibles para la fecha ${body.requestDate}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`
             );
         }
 
         const newRequest = await createRequestService(body);
-        await emitRenewalQuotaUpdated();
+        await emitRequestUsageUpdated();
         handleSuccess(res, 201, "Solicitud creada exitosamente", newRequest);
     } catch (error) {
         handleErrorServer(res, 500, "Error al crear la solicitud", error.message);
@@ -95,15 +102,6 @@ export async function getRequests(req, res) {
         handleSuccess(res, 200, "Solicitudes obtenidas exitosamente", requests);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener las solicitudes", error.message);
-    }
-}
-
-export async function getRenewalQuota(req, res) {
-    try {
-        const quota = await getRenewalQuotaService();
-        handleSuccess(res, 200, "Cupo de renovacion obtenido exitosamente", quota);
-    } catch (error) {
-        handleErrorServer(res, 500, "Error al obtener el cupo de renovacion", error.message);
     }
 }
 
@@ -149,11 +147,20 @@ export async function reviewRequest(req, res) {
         body.reviewerId = payload.id;
 
         const updatedRequest = await reviewRequestService(id, body);
-        await emitRenewalQuotaUpdated();
+        await emitRequestUsageUpdated();
         handleSuccess(res, 200, "Solicitud revisada exitosamente", updatedRequest);
     } catch (error) {
         if (error.message === "Solicitud no encontrada") {
             handleErrorClient(res, 404, error.message);
+        } else if (
+            error.message?.includes("ya no tiene cupos disponibles") ||
+            error.message?.includes("Ese horario ya fue tomado") ||
+            error.message?.includes("No hay cupos disponibles para la fecha") ||
+            error.message?.includes("fecha de retiro debe coincidir") ||
+            error.message?.includes("no existe en la peticion") ||
+            error.message?.includes("ya tiene una cita asignada")
+        ) {
+            handleErrorClient(res, 409, error.message);
         } else {
             handleErrorServer(res, 500, "Error al revisar la solicitud", error.message);
         }
@@ -168,7 +175,7 @@ export async function cancelOwnRequest(req, res) {
         const payload = jwt.decode(token, process.env.JWT_SECRET);
 
         await cancelPendingRequestByCitizenService(id, payload.id);
-        await emitRenewalQuotaUpdated();
+        await emitRequestUsageUpdated();
         handleSuccess(res, 200, "Solicitud cancelada exitosamente");
     } catch (error) {
         if (error.message === "Solicitud no encontrada") {
@@ -183,3 +190,84 @@ export async function cancelOwnRequest(req, res) {
         }
     }
 }
+
+export async function getRequestDateUsage(req, res) {
+    try {
+        const usage = await getRequestDateUsageService();
+        handleSuccess(res, 200, "Uso por fecha obtenido exitosamente", usage);
+    } catch (error) {
+        handleErrorServer(res, 500, "Error al obtener uso por fecha", error.message);
+    }
+}
+
+export async function getPickupAvailabilityByDate(req, res) {
+    try {
+        const { date, citizenId } = req.query;
+        if (!date) return handleErrorClient(res, 400, "La fecha es obligatoria");
+
+        const slots = await getPickupAvailabilityByDateService(date, citizenId);
+        handleSuccess(res, 200, "Disponibilidad de retiro obtenida exitosamente", slots);
+    } catch (error) {
+        handleErrorServer(res, 500, "Error al obtener disponibilidad de retiro", error.message);
+    }
+}
+
+export async function exportRequestsReport(req, res) {
+    try {
+        const { date } = req.query;
+
+        if (!date) {
+            return handleErrorClient(res, 400, "La fecha es obligatoria");
+        }
+
+        const workbook = await generateRequestsReportService(date);
+
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename=renovaciones-${date}.xlsx`
+        );
+
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+            return handleErrorClient(res, 403, error.message);
+        }
+        if (
+            error.message?.includes("No existe un periodo cerrado para exportar") ||
+            error.message?.includes("La fecha no pertenece al ultimo periodo cerrado") ||
+            error.message?.includes("No hay solicitudes para esa fecha")
+        ) {
+            return handleErrorClient(res, 404, error.message);
+        }
+
+        handleErrorServer(res, 500, "Error al exportar el reporte de solicitudes", error.message);
+    }
+}
+
+export async function getRequestReportDates(req, res) {
+    try {
+        const dates = await getRequestReportDatesService();
+        handleSuccess(
+            res,
+            200,
+            dates.length > 0
+                ? "Fechas de solicitudes obtenidas exitosamente"
+                : "No hay fechas disponibles para exportar en el ultimo periodo cerrado",
+            dates
+        );
+    } catch (error) {
+        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+            return handleSuccess(res, 200, "Exportacion bloqueada mientras el periodo este activo", []);
+        }
+        if (error.message?.includes("No existe un periodo cerrado para exportar")) {
+            return handleSuccess(res, 200, "No hay periodos cerrados para exportar", []);
+        }
+        handleErrorServer(res, 500, "Error al obtener fechas de solicitudes", error.message);
+    }
+}
+

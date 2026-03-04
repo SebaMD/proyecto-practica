@@ -1,11 +1,13 @@
-﻿import { AppDataSource } from "../config/configDb.js";
+import { AppDataSource } from "../config/configDb.js";
 import { Appointment } from "../entities/appointment.entity.js";
 import { Petition } from "../entities/petition.entity.js";
 import { IsNull, In } from "typeorm";
 import { getIO } from "../socket.js";
 import { PetitionSchedule } from "../entities/petitionSchedule.entity.js";
+import { Request } from "../entities/request.entity.js";
 
-const GLOBAL_DAILY_QUOTA = 10;
+const GLOBAL_DAILY_QUOTA = 15;
+const SLOT_CAPACITY = 2;
 
 function emitScheduleUpdated(schedule) {
     try {
@@ -20,11 +22,9 @@ function emitScheduleUpdated(schedule) {
             status: schedule.status,
         });
     } catch (error) {
-        // Evita romper logica principal si socket falla
         console.error("Socket emit error (schedule:updated):", error.message);
     }
 }
-
 
 function timeToMinutes(time) {
     const [hour = 0, minute = 0] = String(time || "00:00").split(":").map(Number);
@@ -41,8 +41,40 @@ async function getSameSlotSchedules(scheduleRepository, schedule) {
     });
 }
 
-async function syncSameSlotStatus(scheduleRepository, baseSchedule, nextStatus) {
+async function getSameSlotOccupancy(appointmentRepository, sameSlotSchedules) {
+    if (!sameSlotSchedules.length) {
+        return { activeCount: 0, pendingCount: 0 };
+    }
+
+    const scheduleIds = sameSlotSchedules.map((s) => s.id);
+
+    const activeCount = await appointmentRepository.count({
+        where: {
+            petitionScheduleId: In(scheduleIds),
+            status: In(["pendiente", "aprobado"]),
+        },
+    });
+
+    const pendingCount = await appointmentRepository.count({
+        where: {
+            petitionScheduleId: In(scheduleIds),
+            status: "pendiente",
+        },
+    });
+
+    return { activeCount, pendingCount };
+}
+
+function getStatusByOccupancy(activeCount, pendingCount) {
+    if (activeCount <= 0) return "disponible";
+    if (activeCount >= SLOT_CAPACITY) return pendingCount > 0 ? "pendiente" : "tomada";
+    return "pendiente";
+}
+
+async function syncSameSlotStatus(scheduleRepository, appointmentRepository, baseSchedule) {
     const sameSlotSchedules = await getSameSlotSchedules(scheduleRepository, baseSchedule);
+    const { activeCount, pendingCount } = await getSameSlotOccupancy(appointmentRepository, sameSlotSchedules);
+    const nextStatus = getStatusByOccupancy(activeCount, pendingCount);
 
     for (const item of sameSlotSchedules) {
         item.status = nextStatus;
@@ -51,19 +83,32 @@ async function syncSameSlotStatus(scheduleRepository, baseSchedule, nextStatus) 
     }
 }
 
-async function countOccupiedUniqueSlotsForDate(scheduleRepository, date) {
-    const occupiedSchedules = await scheduleRepository.find({
+async function countActiveAppointmentsForDate(scheduleRepository, appointmentRepository, date) {
+    const schedulesForDate = await scheduleRepository.find({
+        where: { date },
+        select: ["id"],
+    });
+
+    if (!schedulesForDate.length) return 0;
+
+    const scheduleIds = schedulesForDate.map((s) => s.id);
+
+    const appointmentsUsed = await appointmentRepository.count({
         where: {
-            date,
-            status: In(["pendiente", "tomada"]),
+            petitionScheduleId: In(scheduleIds),
+            status: In(["pendiente", "aprobado"]),
         },
     });
 
-    const uniqueSlots = new Set(
-        occupiedSchedules.map((s) => `${s.date}|${s.startTime}|${s.endTime}`)
-    );
+    const requestRepository = AppDataSource.getRepository(Request);
+    const requestsUsed = await requestRepository.count({
+        where: {
+            requestDate: date,
+            status: In(["pendiente", "aprobado"]),
+        },
+    });
 
-    return uniqueSlots.size;
+    return appointmentsUsed + requestsUsed;
 }
 
 export async function createAppointmentService(data){
@@ -72,27 +117,23 @@ export async function createAppointmentService(data){
     const appointmentRepository = AppDataSource.getRepository(Appointment);
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
 
-    // Verificar que la hora exista y estÃ© disponible
     const schedule = await scheduleRepository.findOne({ where: { id: petitionScheduleId, petitionId } });
 
-    if (!schedule || schedule.status !== "disponible") {
-        throw new Error("La hora no estÃ¡ disponible");
+    if (!schedule) {
+        throw new Error("La hora no esta disponible");
     }
 
-    // Evitar doble inscripcion a la misma peticion
-    const existingAppointment = await appointmentRepository.findOne({  
+    const existingAppointment = await appointmentRepository.findOne({
         where: [
             { userId, petitionId, status: "pendiente" },
             { userId, petitionId, status: "aprobado" },
-        ], 
+        ],
     });
 
     if (existingAppointment) {
-        throw new Error("Ya tienes una inscripciÃ³n para esta peticiÃ³n");
+        throw new Error("Ya tienes una inscripcion para esta peticion");
     }
 
-
-    // Evitar tomar la misma franja horaria en otra peticion (misma fecha + traslape)
     const citizenAppointments = await appointmentRepository.find({
         where: [
             { userId, status: "pendiente" },
@@ -120,53 +161,28 @@ export async function createAppointmentService(data){
     if (hasTimeConflict) {
         throw new Error("Ya tienes una inscripcion en ese horario para la misma fecha");
     }
-    const petitionQuota = await scheduleRepository.count({
-        where: {
-            petitionId,
-            date: schedule.date,
-        },
-    });
 
-    if (petitionQuota < 1) {
-        throw new Error("La peticion no tiene horarios configurados para esa fecha");
-    }
-
-    const occupiedCountForPetitionDate = await scheduleRepository.count({
-        where: {
-            petitionId,
-            date: schedule.date,
-            status: In(["pendiente", "tomada"]),
-        },
-    });
-
-    if (occupiedCountForPetitionDate >= petitionQuota) {
-        throw new Error(`No hay cupos disponibles para esta peticion en la fecha ${schedule.date}`);
-    }
-
-    const occupiedCountForDate = await countOccupiedUniqueSlotsForDate(scheduleRepository, schedule.date);
+    const occupiedCountForDate = await countActiveAppointmentsForDate(
+        scheduleRepository,
+        appointmentRepository,
+        schedule.date
+    );
 
     if (occupiedCountForDate >= GLOBAL_DAILY_QUOTA) {
-        throw new Error(`No hay cupos disponibles para la fecha ${schedule.date}. MÃƒÂ¡ximo diario: ${GLOBAL_DAILY_QUOTA}`);
+        throw new Error(`No hay cupos disponibles para la fecha ${schedule.date}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`);
     }
 
-    const occupiedSameSlot = await scheduleRepository.count({
-        where: {
-            date: schedule.date,
-            startTime: schedule.startTime,
-            endTime: schedule.endTime,
-            status: In(["pendiente", "tomada"]),
-        },
-    });
+    const sameSlotSchedules = await getSameSlotSchedules(scheduleRepository, schedule);
+    const { activeCount: occupiedSameSlot } = await getSameSlotOccupancy(appointmentRepository, sameSlotSchedules);
 
-    if (occupiedSameSlot > 0) {
-        throw new Error("Esa franja horaria ya fue tomada para esa fecha");
+    if (occupiedSameSlot >= SLOT_CAPACITY) {
+        throw new Error(`Esa franja horaria ya alcanzo el maximo de ${SLOT_CAPACITY} cupos`);
     }
-
-    // Bloqueamos la franja completa (misma fecha + hora) en todas las peticiones
-    await syncSameSlotStatus(scheduleRepository, schedule, "pendiente");
 
     const newAppointment = appointmentRepository.create({ userId, petitionId, petitionScheduleId, status: "pendiente" });
     const savedAppointment = await appointmentRepository.save(newAppointment);
+
+    await syncSameSlotStatus(scheduleRepository, appointmentRepository, schedule);
 
     return savedAppointment;
 }
@@ -203,7 +219,7 @@ export async function getAppointmentIdService(id){
     const appointment = await appointmentRepository.findOneBy({ id: parseInt(id) });
 
     if (!appointment) throw new Error("Inscripcion no encontrada");
-    
+
     return appointment;
 }
 
@@ -222,7 +238,9 @@ export async function deleteAppointmentIdService(id){
         });
 
         if (schedule) {
-            await syncSameSlotStatus(scheduleRepository, schedule, "disponible");
+            await appointmentRepository.remove(appointment);
+            await syncSameSlotStatus(scheduleRepository, appointmentRepository, schedule);
+            return true;
         }
     }
 
@@ -235,29 +253,32 @@ export async function updateStatusService(id, data, supervisorId){
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
     const appointment = await getAppointmentIdService(id);
 
-    if (!appointment) throw new Error("InscripciÃ³n no encontrada");
+    if (!appointment) throw new Error("Inscripcion no encontrada");
 
-    const Status = appointment.status;
+    const previousStatus = appointment.status;
 
     appointment.status = data.status;
     appointment.reviewedAt = new Date();
     appointment.supervisorId = supervisorId;
 
-    if (data.status === "rechazado") appointment.rejectReason = data.rejectReason;
+    if (data.status === "rechazado") {
+        appointment.rejectReason = data.rejectReason;
+    }
 
     const schedule = await scheduleRepository.findOne({ where: { id: appointment.petitionScheduleId } });
 
     if(!schedule) throw new Error("Horario no encontrado");
 
-    if(data.status === "aprobado"){
-        await syncSameSlotStatus(scheduleRepository, schedule, "tomada");
+    const savedAppointment = await appointmentRepository.save(appointment);
+
+    if (
+        data.status === "aprobado" ||
+        (data.status === "rechazado" && previousStatus === "pendiente")
+    ) {
+        await syncSameSlotStatus(scheduleRepository, appointmentRepository, schedule);
     }
 
-    if(data.status === "rechazado" && Status === "pendiente"){
-        await syncSameSlotStatus(scheduleRepository, schedule, "disponible");
-    }
-
-    return await appointmentRepository.save(appointment);
+    return savedAppointment;
 }
 
 export async function getPetitionsByPrerequisitesService() {
@@ -265,8 +286,8 @@ export async function getPetitionsByPrerequisitesService() {
 
     return await petitionRepository.find({
         where: [
-            { prerrequisites: IsNull() }, 
-            { prerrequisites: "" }         
+            { prerrequisites: IsNull() },
+            { prerrequisites: "" }
         ]
     });
 }
