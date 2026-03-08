@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 export async function getUsersService() {
     const userRepository = AppDataSource.getRepository(User);
     return await userRepository.find({
-        select: ["id", "username", "email", "rut", "role", "createdAt", "updatedAt"],
+        select: ["id", "username", "email", "rut", "role", "accountStatus", "createdAt", "updatedAt"],
     });
 }
 
@@ -13,7 +13,7 @@ export async function getUserByIdService(id) {
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
         where: { id },
-        select: ["id", "username", "email", "rut", "role", "createdAt", "updatedAt"],
+        select: ["id", "username", "email", "rut", "role", "accountStatus", "createdAt", "updatedAt"],
     });
 
     if (!user) {
@@ -25,8 +25,7 @@ export async function getUserByIdService(id) {
 
 export async function editUserService(id, data) {
     const userRepository = AppDataSource.getRepository(User);
-    const { username, email, password, rut, role } = data;
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const { username, email, password, rut, role, accountStatus } = data;
     const user = await userRepository.findOne({
         where: { id },
     });
@@ -37,9 +36,13 @@ export async function editUserService(id, data) {
 
     if (username) user.username = username;
     if (email) user.email = email;
-    if (password) user.password = hashedPassword;
+    if (password) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        user.password = hashedPassword;
+    }
     if (rut) user.rut = rut;
     if (role) user.role = role;
+    if (accountStatus) user.accountStatus = accountStatus;
 
     const updatedUser = await userRepository.save(user);
     delete updatedUser.password;

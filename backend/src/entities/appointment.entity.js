@@ -42,6 +42,11 @@ export const Appointment = new EntitySchema({
             nullable: true,
             default: null,
         },
+        archivedBySupervisor: {
+            type: "boolean",
+            nullable: false,
+            default: false,
+        },
         createdAt: {
             type: "timestamp",
             default: () => "CURRENT_TIMESTAMP",

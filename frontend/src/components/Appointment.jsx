@@ -1,6 +1,7 @@
 // frontend/src/components/Appointments.jsx
 import { useAuth } from "@context/AuthContext";
 import {
+    archiveReviewedAppointment,
     deleteAppointment,
     updateAppointmentStatus,
 } from "@services/appointment.service";
@@ -10,7 +11,7 @@ import {
     showSuccessToast,
 } from "@helpers/sweetAlert";
 import { Badge } from "@components/Badge";
-import { Calendar, CalendarCheck, Eye, Trash2 } from "lucide-react";
+import { Archive, Calendar, CalendarCheck, Eye, Trash2 } from "lucide-react";
 import Swal from "sweetalert2";
 
 export function Appointment({ appointment, onActionSuccess }) {
@@ -115,6 +116,16 @@ export function Appointment({ appointment, onActionSuccess }) {
         }
     };  
 
+    const handleArchive = async () => {
+        const result = await archiveReviewedAppointment(appointment.id);
+        if (result.success) {
+            showSuccessToast("Inscripcion archivada");
+            onActionSuccess?.();
+        } else {
+            showErrorAlert("Error", result.message);
+        }
+    };
+
     const handleViewDetails = async () => {
         await Swal.fire({
             title: "Detalle de la inscripción",
@@ -194,6 +205,18 @@ export function Appointment({ appointment, onActionSuccess }) {
     const requestedDate = appointment.schedule?.date || "-";
 
     const requestedHour = appointment.schedule ? `${appointment.schedule.startTime?.slice(0, 5)} - ${appointment.schedule.endTime?.slice(0, 5)}` : "-";
+    const canArchiveReviewedAppointment = (() => {
+        if (!isSupervisor || appointment.status === "pendiente") return false;
+
+        const date = appointment?.schedule?.date;
+        const endTime = String(appointment?.schedule?.endTime || "").slice(0, 5);
+        if (!date || !endTime) return false;
+
+        const [year, month, day] = String(date).split("-").map(Number);
+        const [hour, minute] = String(endTime).split(":").map(Number);
+        const endDateTime = new Date(year, month - 1, day, hour, minute, 0, 0);
+        return new Date() >= endDateTime;
+    })();
 
     return (
         <div
@@ -277,6 +300,16 @@ export function Appointment({ appointment, onActionSuccess }) {
                     >
                         <Eye className="h-4 w-4" />
                         Ver
+                    </button>
+                )}
+
+                {isSupervisor && canArchiveReviewedAppointment && (
+                    <button
+                        onClick={handleArchive}
+                        className="px-3 py-1.5 text-sm border rounded-md flex items-center gap-1.5 hover:bg-amber-50 text-amber-700 border-amber-200"
+                    >
+                        <Archive className="h-4 w-4" />
+                        Archivar
                     </button>
                 )}
 

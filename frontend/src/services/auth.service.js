@@ -23,7 +23,11 @@ export async function login(email, password) {
 export async function register(data) {
     try {
         const response = await axios.post("/auth/register", data);
-        return { success: true, message: response.data };
+        return {
+            success: true,
+            data: response.data.data,
+            message: response.data.message || "Solicitud de registro enviada",
+        };
     } catch (error) {
         console.error("Error en el servicio de register:", error.response?.data);
         return { 

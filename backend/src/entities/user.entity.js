@@ -38,6 +38,12 @@ export const User = new EntitySchema({
             default: "ciudadano",
             nullable: false,
         },
+        accountStatus: {
+            type: "enum",
+            enum: ["pendiente", "aprobado", "rechazado"],
+            default: "aprobado",
+            nullable: false,
+        },
         createdAt: {
             type: "timestamp",
             createDate: true,

@@ -374,3 +374,38 @@ export async function cancelPendingRequestByCitizenService(id, citizenId) {
     await requestRepository.delete(request.id);
     return true;
 }
+
+export async function archiveReviewedRequestByFuncionarioService(id, reviewerId) {
+    const requestRepository = AppDataSource.getRepository(Request);
+    const request = await requestRepository.findOneBy({ id: parseInt(id) });
+
+    if (!request) throw new Error("Solicitud no encontrada");
+    if (request.status === "pendiente") {
+        throw new Error("Solo se pueden archivar solicitudes revisadas");
+    }
+    if (Number(request.reviewerId) !== Number(reviewerId)) {
+        throw new Error("La solicitud no pertenece a las revisiones del funcionario");
+    }
+
+    if (request.status === "aprobado") {
+        const pickupDate = request.pickupDate;
+        const pickupTime = request.pickupTime;
+        if (!pickupDate || !pickupTime) {
+            throw new Error("No se pudo validar la hora de atencion para archivar");
+        }
+
+        const pickupEndTime = add30Minutes(pickupTime);
+        const [year, month, day] = String(pickupDate).split("-").map(Number);
+        const [hour, minute] = String(pickupEndTime).split(":").map(Number);
+        const endDateTime = new Date(year, month - 1, day, hour, minute, 0, 0);
+
+        if (new Date() < endDateTime) {
+            throw new Error("Solo puedes archivar cuando haya pasado la fecha y hora de atencion");
+        }
+    }
+
+    request.archivedByFuncionario = true;
+    const savedRequest = await requestRepository.save(request);
+    const [requestWithCitizen] = await attachCitizenData([savedRequest]);
+    return requestWithCitizen;
+}

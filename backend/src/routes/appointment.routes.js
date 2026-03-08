@@ -11,6 +11,7 @@ import {
     getPetitionsByPrerequisites,
     exportAppointmentsReport,
     getSupervisorReportDates,
+    archiveReviewedAppointmentBySupervisor,
 } from "../controllers/appointment.controller.js";
 
 const router = Router();
@@ -29,5 +30,6 @@ router.post("/", verifyRoles(["ciudadano"]), createAppointment);
 router.delete("/:id", verifyRoles(["ciudadano"]), deleteAppointmentId);
 
 router.patch("/status/:id", verifyRoles(["supervisor"]), updateStatus); 
+router.patch("/archive/:id", verifyRoles(["supervisor"]), archiveReviewedAppointmentBySupervisor); 
 
 export default router;

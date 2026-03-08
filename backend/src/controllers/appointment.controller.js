@@ -14,7 +14,8 @@ import {
     deleteAppointmentIdService, 
     updateStatusService, 
     hasAppointmentToPetitionService, 
-    getPetitionsByPrerequisitesService 
+    getPetitionsByPrerequisitesService,
+    archiveReviewedAppointmentBySupervisorService,
 } from "../services/appointment.service.js";
 import {
     generateAppointmentsReportService,
@@ -80,7 +81,10 @@ export async function getAppointment(req, res){
             appointments = appointments.filter(
                 (appointment) =>
                     appointment.status === "pendiente" ||
-                    appointment.supervisorId === payload.id
+                    (
+                        appointment.supervisorId === payload.id &&
+                        !appointment.archivedBySupervisor
+                    )
             );
         }
 
@@ -89,6 +93,32 @@ export async function getAppointment(req, res){
         handleSuccess(res, 200, "Inscripciones obtenidas exitosamente", appointments);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener las solicitudes", error.message);
+    }
+}
+
+export async function archiveReviewedAppointmentBySupervisor(req, res) {
+    try {
+        const { id } = req.params;
+        const authHeader = req.headers["authorization"];
+        if (!authHeader) return handleErrorClient(res, 401, "Token no proporcionado");
+
+        const token = authHeader.split(" ")[1];
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
+
+        const archivedAppointment = await archiveReviewedAppointmentBySupervisorService(id, payload.id);
+        handleSuccess(res, 200, "Inscripcion archivada exitosamente", archivedAppointment);
+    } catch (error) {
+        if (
+            error.message === "Inscripcion no encontrada" ||
+            error.message === "Solo se pueden archivar inscripciones revisadas" ||
+            error.message === "La inscripcion no pertenece a las revisiones del supervisor" ||
+            error.message === "Solo puedes archivar cuando haya pasado la fecha y hora de atencion" ||
+            error.message === "No se pudo validar la hora de atencion para archivar"
+        ) {
+            return handleErrorClient(res, 409, error.message);
+        }
+
+        handleErrorServer(res, 500, "Error al archivar la inscripcion", error.message);
     }
 }
 

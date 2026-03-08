@@ -1,5 +1,6 @@
 import { showErrorAlert, showSuccessToast } from "@helpers/sweetAlert";
 import {
+  archiveReviewedRequest,
   getPickupAvailabilityByDate,
   reviewRequest,
   cancelOwnRequest,
@@ -8,7 +9,7 @@ import { getPetitionById } from "@services/petition.service";
 import socket from "@services/socket.service";
 import { useAuth } from "@context/AuthContext";
 import { Badge } from "@components/Badge";
-import { Calendar, CalendarCheck, Eye, Trash2 } from "lucide-react";
+import { Archive, Calendar, CalendarCheck, Eye, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 
@@ -96,6 +97,32 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
     showSuccessToast("Solicitud cancelada exitosamente");
     fetchCallback?.();
   };
+
+  const handleArchiveRequest = async () => {
+    const result = await archiveReviewedRequest(request.id);
+    if (!result.success) {
+      showErrorAlert("Error", result.message || "No se pudo archivar la solicitud");
+      return;
+    }
+
+    showSuccessToast("Solicitud archivada exitosamente");
+    fetchCallback?.();
+  };
+
+  const canArchiveReviewedRequest = (() => {
+    if (!isFuncionario || request.status === "pendiente") return false;
+    if (request.status === "rechazado") return true;
+
+    const pickupDate = request?.pickupDate;
+    const pickupTime = String(request?.pickupTime || "").slice(0, 5);
+    if (!pickupDate || !pickupTime) return false;
+
+    const [year, month, day] = String(pickupDate).split("-").map(Number);
+    const [hour, minute] = String(pickupTime).split(":").map(Number);
+    const startDateTime = new Date(year, month - 1, day, hour, minute, 0, 0);
+    const endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
+    return new Date() >= endDateTime;
+  })();
 
   if (loading || !petition) {
     if (isCiudadano) return <p>Cargando...</p>;
@@ -191,13 +218,25 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
           </div>
         </td>
         <td className="p-3 text-center align-middle">
-          <button
-            onClick={handleViewDetails}
-            className="px-3 py-1 text-sm inline-flex items-center gap-2 rounded-xl border border-gray-400 hover:bg-blue-600 hover:text-white hover:border-blue-600"
-          >
-            <Eye className="h-4 w-4" />
-            Ver
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={handleViewDetails}
+              className="px-3 py-1 text-sm inline-flex items-center gap-2 rounded-xl border border-gray-400 hover:bg-blue-600 hover:text-white hover:border-blue-600"
+            >
+              <Eye className="h-4 w-4" />
+              Ver
+            </button>
+
+            {canArchiveReviewedRequest && (
+              <button
+                onClick={handleArchiveRequest}
+                className="px-3 py-1 text-sm inline-flex items-center gap-2 rounded-xl border border-amber-300 text-amber-700 hover:bg-amber-50"
+              >
+                <Archive className="h-4 w-4" />
+                Archivar
+              </button>
+            )}
+          </div>
         </td>
       </tr>
     );

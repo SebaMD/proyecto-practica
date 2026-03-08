@@ -9,6 +9,7 @@ import {
     reviewRequest,
     exportRequestsReport,
     getRequestReportDates,
+    archiveReviewedRequestByFuncionario,
 } from "../controllers/request.controller.js";
 import { verifyRoles } from "../middleware/authorization.middleware.js";
 
@@ -26,5 +27,6 @@ router.post("/", verifyRoles(["ciudadano"]), createRequest);
 router.delete("/:id", verifyRoles(["ciudadano"]), cancelOwnRequest);
 
 router.patch("/review/:id", verifyRoles(["funcionario"]), reviewRequest);
+router.patch("/archive/:id", verifyRoles(["funcionario"]), archiveReviewedRequestByFuncionario);
 
 export default router;

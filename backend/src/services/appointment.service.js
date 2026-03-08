@@ -248,6 +248,40 @@ export async function deleteAppointmentIdService(id){
     return true;
 }
 
+export async function archiveReviewedAppointmentBySupervisorService(id, supervisorId) {
+    const appointmentRepository = AppDataSource.getRepository(Appointment);
+    const appointment = await appointmentRepository.findOne({
+        where: { id: parseInt(id) },
+        relations: {
+            schedule: true,
+        },
+    });
+
+    if (!appointment) throw new Error("Inscripcion no encontrada");
+    if (appointment.status === "pendiente") {
+        throw new Error("Solo se pueden archivar inscripciones revisadas");
+    }
+    if (Number(appointment.supervisorId) !== Number(supervisorId)) {
+        throw new Error("La inscripcion no pertenece a las revisiones del supervisor");
+    }
+    const scheduleDate = appointment?.schedule?.date;
+    const scheduleEnd = String(appointment?.schedule?.endTime || "").slice(0, 5);
+    if (!scheduleDate || !scheduleEnd) {
+        throw new Error("No se pudo validar la hora de atencion para archivar");
+    }
+
+    const [year, month, day] = String(scheduleDate).split("-").map(Number);
+    const [hour, minute] = String(scheduleEnd).split(":").map(Number);
+    const endDateTime = new Date(year, month - 1, day, hour, minute, 0, 0);
+
+    if (new Date() < endDateTime) {
+        throw new Error("Solo puedes archivar cuando haya pasado la fecha y hora de atencion");
+    }
+
+    appointment.archivedBySupervisor = true;
+    return await appointmentRepository.save(appointment);
+}
+
 export async function updateStatusService(id, data, supervisorId){
     const appointmentRepository = AppDataSource.getRepository(Appointment);
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);

@@ -62,6 +62,11 @@ export const Request = new EntitySchema({
             nullable: true,
             default: null,
         },
+        archivedByFuncionario: {
+            type: "boolean",
+            nullable: false,
+            default: false,
+        },
         createdAt: {
             type: "timestamp",
             createDate: true,

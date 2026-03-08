@@ -634,10 +634,28 @@ const Requests = () => {
                                                 );
                                             }
                                             if (r.status === "aprobado" && showApproved && isFuncionarioReviewsView) {
-                                                return <RequestCard key={r.id} request={r} />;
+                                                return (
+                                                    <RequestCard
+                                                        key={r.id}
+                                                        request={r}
+                                                        fetchCallback={async () => {
+                                                            await fetchRequests();
+                                                            await fetchRequestReportDates();
+                                                        }}
+                                                    />
+                                                );
                                             }
                                             if (r.status === "rechazado" && showRejected && isFuncionarioReviewsView) {
-                                                return <RequestCard key={r.id} request={r} />;
+                                                return (
+                                                    <RequestCard
+                                                        key={r.id}
+                                                        request={r}
+                                                        fetchCallback={async () => {
+                                                            await fetchRequests();
+                                                            await fetchRequestReportDates();
+                                                        }}
+                                                    />
+                                                );
                                             }
                                             return null;
                                         })}

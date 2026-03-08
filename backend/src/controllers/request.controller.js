@@ -13,6 +13,7 @@ import {
     countGlobalUsedForDateService,
     getRequestDateUsageService,
     getPickupAvailabilityByDateService,
+    archiveReviewedRequestByFuncionarioService,
 } from "../services/request.service.js";
 import {
     createRequestBodyValidation,
@@ -96,12 +97,40 @@ export async function getRequests(req, res) {
 
                 return citizenId === payload.id;
             });
+        } else if (payload.role === "funcionario") {
+            requests = requests.filter(
+                (request) => request.status === "pendiente" || !request.archivedByFuncionario
+            );
         }
 
         if (requests.length === 0) return handleSuccess(res, 200, "No hay solicitudes disponibles");
         handleSuccess(res, 200, "Solicitudes obtenidas exitosamente", requests);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener las solicitudes", error.message);
+    }
+}
+
+export async function archiveReviewedRequestByFuncionario(req, res) {
+    try {
+        const { id } = req.params;
+        const authHeader = req.headers["authorization"];
+        const token = authHeader.split(" ")[1];
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
+
+        const archivedRequest = await archiveReviewedRequestByFuncionarioService(id, payload.id);
+        handleSuccess(res, 200, "Solicitud archivada exitosamente", archivedRequest);
+    } catch (error) {
+        if (
+            error.message === "Solicitud no encontrada" ||
+            error.message === "Solo se pueden archivar solicitudes revisadas" ||
+            error.message === "La solicitud no pertenece a las revisiones del funcionario" ||
+            error.message === "Solo puedes archivar cuando haya pasado la fecha y hora de atencion" ||
+            error.message === "No se pudo validar la hora de atencion para archivar"
+        ) {
+            return handleErrorClient(res, 409, error.message);
+        }
+
+        handleErrorServer(res, 500, "Error al archivar la solicitud", error.message);
     }
 }
 

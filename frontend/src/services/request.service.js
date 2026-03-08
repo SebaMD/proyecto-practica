@@ -132,6 +132,24 @@ export async function reviewRequest(id, data) {
     }
 }
 
+export async function archiveReviewedRequest(id) {
+    try {
+        const response = await axios.patch(`/requests/archive/${id}`);
+
+        return {
+            success: true,
+            data: response.data.data,
+            message: response.data.message || "Solicitud archivada correctamente",
+        };
+    } catch (error) {
+        console.error("Error en archiveReviewedRequest():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudo archivar la solicitud",
+        };
+    }
+}
+
 export async function exportRequestsReport(date) {
     try {
         const response = await axios.get("/requests/export", {

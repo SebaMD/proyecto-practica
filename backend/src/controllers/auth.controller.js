@@ -40,7 +40,7 @@ export async function register(req, res){
         const newUser = await registerService(value);
         delete newUser.password;
 
-        handleSuccess(res, 201, "Usuario registrado exitosamente", newUser);
+        handleSuccess(res, 201, "Solicitud de registro enviada. Cuenta pendiente de aprobacion", newUser);
     }catch(error){
         if(error.code === "23505"){
             if(error.detail?.includes("email")){

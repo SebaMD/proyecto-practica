@@ -108,6 +108,24 @@ export async function deleteAppointment(id) {
     }
 }
 
+export async function archiveReviewedAppointment(id) {
+    try {
+        const response = await axios.patch(`/appointments/archive/${id}`);
+
+        return {
+            success: true,
+            data: response.data.data,
+            message: response.data.message || "Inscripcion archivada correctamente",
+        };
+    } catch (error) {
+        console.error("Error en archiveReviewedAppointment():", error);
+        return {
+            success: false,
+            message: error.response?.data?.message || "No se pudo archivar la inscripcion",
+        };
+    }
+}
+
 export async function exportAppointmentsReport(date) {
     try {
         const response = await axios.get("/appointments/export", {
