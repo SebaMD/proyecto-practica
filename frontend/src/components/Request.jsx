@@ -29,7 +29,7 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
         const result = await getPetitionById(request.petitionId);
         if (result.success) setPetition(result.data);
       } catch (error) {
-        showErrorAlert("Error", "No se pudo cargar la peticion", error);
+        showErrorAlert("Error", "No se pudo cargar la petición", error);
       } finally {
         setLoading(false);
       }
@@ -78,7 +78,7 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
   const handleCancelRequest = async () => {
     const confirm = await Swal.fire({
       title: "Cancelar solicitud",
-      text: "Esta accion cancelara tu solicitud pendiente de renovacion.",
+      text: "Esta acción cancelará tu solicitud pendiente de renovación.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Si, cancelar",
@@ -306,6 +306,8 @@ async function requestDetailsDialog(request, petition, canReview) {
     denyButtonText: "Rechazar",
     showCancelButton: true,
     cancelButtonText: "Cerrar",
+    allowOutsideClick: false,
+    allowEscapeKey: false,
     preDeny: async () => {
       const rejectReason = await reviewCommentDialog();
       if (!rejectReason) return false;
@@ -339,6 +341,8 @@ async function requestDetailsDialog(request, petition, canReview) {
     confirmButtonText: "Aprobar",
     showCancelButton: true,
     cancelButtonText: "Volver",
+    allowOutsideClick: false,
+    allowEscapeKey: false,
     didOpen: () => {
       const dateSelect = document.getElementById("pickupDateSelect");
       const grid = document.getElementById("pickupSlotsGrid");
@@ -473,6 +477,8 @@ async function reviewCommentDialog() {
     showCancelButton: true,
     confirmButtonText: "Guardar",
     cancelButtonText: "Cancelar",
+    allowOutsideClick: false,
+    allowEscapeKey: false,
     inputValidator: (v) => {
       const text = (v || "").trim();
       if (!text) return "El motivo es obligatorio";

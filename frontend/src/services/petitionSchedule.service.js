@@ -1,10 +1,5 @@
 import axios from "./root.service.js";
 
-/**
- * Obtener horarios de una petición por fecha
- * @param {number} petitionId
- * @param {string} date (YYYY-MM-DD)
- */
 export async function getPetitionSchedules(petitionId, date) {
     try {
         const params = { petitionId };
@@ -26,10 +21,6 @@ export async function getPetitionSchedules(petitionId, date) {
     }
 }
 
-/**
- * Crear un horario para una petición
- * (solo funcionario)
- */
 export async function createPetitionSchedule(data) {
     try {
         const response = await axios.post("/petitionSchedules", data);

@@ -23,7 +23,7 @@ import { Badge } from "@components/Badge";
 import { PlusCircle, CheckCircle } from "lucide-react";
 import { getActivePeriod } from "@services/period.service";
 import { getAppointments } from "@services/appointment.service";
-import { getRequestDateUsage } from "@services/request.service";
+import { getRequestDateUsage, getRequests } from "@services/request.service";
 import socket from "@services/socket.service";
 import Swal from "sweetalert2";
 
@@ -62,6 +62,7 @@ const Petition = () => {
     const [selectedScheduleIdByPetition, setSelectedScheduleIdByPetition] = useState({});
     const [selectedCitizenDate, setSelectedCitizenDate] = useState("");
     const [citizenAppointments, setCitizenAppointments] = useState([]);
+    const [citizenRequests, setCitizenRequests] = useState([]);
     const [requestUsageByDate, setRequestUsageByDate] = useState({});
 
     const { user } = useAuth();
@@ -97,7 +98,7 @@ const Petition = () => {
             const period = await getActivePeriod();
             setActivePeriod(period || null);
         } catch (error) {
-            console.error("Error al obtener periodo activo:", error);
+            console.error("Error al obtener período activo:", error);
             setActivePeriod(null);
         }
     };
@@ -129,6 +130,21 @@ const Petition = () => {
             setRequestUsageByDate(usageMap);
         } catch (error) {
             console.error("Error al obtener uso por fecha de solicitudes:", error);
+        }
+    };
+
+    const fetchCitizenRequests = async () => {
+        if (!isCiudadano) return;
+        try {
+            const result = await getRequests();
+            if (!result.success) {
+                setCitizenRequests([]);
+                return;
+            }
+            setCitizenRequests(result.data || []);
+        } catch (error) {
+            console.error("Error al obtener solicitudes del ciudadano:", error);
+            setCitizenRequests([]);
         }
     };
 
@@ -178,7 +194,10 @@ const Petition = () => {
         fetchPetitions();
         fetchActivePeriod();
         fetchRequestDateUsage();
-        if (isCiudadano) fetchCitizenAppointments();
+        if (isCiudadano) {
+            fetchCitizenAppointments();
+            fetchCitizenRequests();
+        }
     }, []);
     /* eslint-enable react-hooks/exhaustive-deps */
 
@@ -192,7 +211,7 @@ const Petition = () => {
             await fetchRequestDateUsage();
             if (isCiudadano) await fetchCitizenAppointments();
 
-            // Si quieres refrescar tambiÃ©n la lista completa (mÃ¡s pesado), usa fetchPetitions()
+            // Si quieres refrescar también la lista completa (más pesado), usa fetchPetitions()
             // await fetchPetitions();
         };
 
@@ -208,6 +227,7 @@ const Petition = () => {
         const handleRequestUsageUpdated = async () => {
             await fetchPetitions();
             await fetchRequestDateUsage();
+            if (isCiudadano) await fetchCitizenRequests();
         };
 
         socket.on("request:usage-updated", handleRequestUsageUpdated);
@@ -216,7 +236,7 @@ const Petition = () => {
             socket.off("request:usage-updated", handleRequestUsageUpdated);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [isCiudadano]);
 
     useEffect(() => {
         if (!selectedPetition) return;
@@ -244,7 +264,7 @@ const Petition = () => {
             : "Sin prerrequisitos";
 
         await Swal.fire({
-            title: "Detalle de la peticion",
+            title: "Detalle de la petición",
             width: 760,
             html: `
                 <div class="text-left flex flex-col gap-3">
@@ -275,29 +295,10 @@ const Petition = () => {
 
     const openDefineScheduleDialog = async (petition) => {
         if (isFuncionarioLockedByActivePeriod) {
-            showErrorAlert("Bloqueado", "No puedes modificar horarios mientras hay un perÃ­odo activo.");
+            showErrorAlert("Bloqueado", "No puedes modificar horarios mientras hay un período activo.");
             return;
         }
-
-        const result = await Swal.fire({
-            title: `Horas - ${petition.name}`,
-            text: "¿Que quieres hacer?",
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: "Editar",
-            denyButtonText: "Agregar fecha",
-            cancelButtonText: "Cancelar",
-        });
-
-        if (result.isConfirmed) {
-            await openEditDateSchedulesDialog(petition);
-            return;
-        }
-
-        if (result.isDenied) {
-            await openAddDateSchedulesDialog(petition);
-            return;
-        }
+        await openEditDateSchedulesDialog(petition);
     };
 
     const getTodayLocalDate = () => {
@@ -325,6 +326,14 @@ const Petition = () => {
         return day === 0 || day === 6;
     };
 
+    const toDateOnlyString = (dateObj) => {
+        if (!(dateObj instanceof Date)) return "";
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const d = String(dateObj.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    };
+
 
     const openAddDateSchedulesDialog = async (petition) => {
         const today = getTodayLocalDate();
@@ -332,6 +341,7 @@ const Petition = () => {
         const allUsedDates = [...new Set((schedulesByPetition[petition.id] || []).map((s) => s.date))].sort();
         const existingDatesSet = new Set(allUsedDates);
         const blockedDates = [...allUsedDates];
+        const hasNoGlobalQuota = (dateValue) => getGlobalQuotaByDate(dateValue).available <= 0;
 
         const { value: date } = await Swal.fire({
             title: `Agregar fecha - ${petition.name}`,
@@ -340,7 +350,7 @@ const Petition = () => {
                     <label class="text-sm font-medium">Fecha</label>
                     <input id="scheduleDatePicker" class="swal2-input m-0" placeholder="Selecciona una fecha" />
                     <p class="text-xs text-gray-600">
-                        El calendario bloquea fechas usadas, pasadas y fines de semana.
+                        El calendario bloquea fechas usadas, sin cupos globales, pasadas y fines de semana.
                     </p>
                 </div>
             `,
@@ -360,14 +370,17 @@ const Petition = () => {
                     disable: [
                         ...blockedDates,
                         (dateObj) => {
+                            const dateValue = toDateOnlyString(dateObj);
                             const day = dateObj.getDay();
-                            return day === 0 || day === 6;
+                            return day === 0 || day === 6 || hasNoGlobalQuota(dateValue);
                         },
                     ],
                     onDayCreate: (_dObj, _dStr, _fp, dayElem) => {
                         if (dayElem.classList.contains("flatpickr-disabled")) {
                             const dateObj = dayElem.dateObj;
+                            const dateValue = toDateOnlyString(dateObj);
                             const isWeekend = dateObj && (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+                            const isNoQuotaDate = dateValue && hasNoGlobalQuota(dateValue);
 
                             dayElem.style.textDecoration = "line-through";
                             dayElem.style.opacity = "1";
@@ -377,6 +390,11 @@ const Petition = () => {
                                 dayElem.style.color = "#6b7280";
                                 dayElem.style.backgroundColor = "#f3f4f6";
                                 dayElem.style.borderColor = "#d1d5db";
+                            } else if (isNoQuotaDate) {
+                                dayElem.style.textDecorationColor = "#dc2626";
+                                dayElem.style.color = "#dc2626";
+                                dayElem.style.backgroundColor = "#fef2f2";
+                                dayElem.style.borderColor = "#fecaca";
                             } else {
                                 dayElem.style.textDecorationColor = "#dc2626";
                                 dayElem.style.color = "#dc2626";
@@ -398,15 +416,19 @@ const Petition = () => {
                     return false;
                 }
                 if (selectedDate <= today) {
-                    Swal.showValidationMessage("Solo puedes crear horarios desde el dia siguiente.");
+                    Swal.showValidationMessage("Solo puedes crear horarios desde el día siguiente.");
                     return false;
                 }
                 if (isWeekendDate(selectedDate)) {
-                    Swal.showValidationMessage("No puedes seleccionar sabado o domingo. Elige un dia habil.");
+                    Swal.showValidationMessage("No puedes seleccionar sábado o domingo. Elige un día hábil.");
                     return false;
                 }
                 if (existingDatesSet.has(selectedDate)) {
-                    Swal.showValidationMessage("Esa fecha ya fue usada en esta peticion. Elige otra fecha o usa Editar.");
+                    Swal.showValidationMessage("Esa fecha ya fue usada en esta petición. Elige otra fecha o usa Editar.");
+                    return false;
+                }
+                if (hasNoGlobalQuota(selectedDate)) {
+                    Swal.showValidationMessage("Esa fecha ya no tiene cupos globales disponibles.");
                     return false;
                 }
                 return selectedDate;
@@ -418,7 +440,7 @@ const Petition = () => {
         const resultExisting = await getPetitionSchedules(petition.id, date);
         const existing = resultExisting.success ? (resultExisting.data || []) : [];
 
-        await openSlotsSelectorDialog({ petition, date, existing, requireAtLeastOne: true });
+        return await openSlotsSelectorDialog({ petition, date, existing, requireAtLeastOne: true });
     };
 
     const openEditDateSchedulesDialog = async (petition) => {
@@ -426,32 +448,36 @@ const Petition = () => {
         const dates = getRecentDateOptions(allSchedules);
 
         if (dates.length === 0) {
-            Swal.fire({
-                icon: "info",
-                title: "Sin fechas",
-                text: "Esta peticion aun no tiene fechas registradas.",
-            });
-            return;
+            return await openAddDateSchedulesDialog(petition);
         }
 
         const options = Object.fromEntries(dates.map((d) => [d, d]));
-        const { value: date } = await Swal.fire({
+        const result = await Swal.fire({
             title: `Editar horarios - ${petition.name}`,
             input: "select",
             inputOptions: options,
             inputValue: dates[0],
             showCancelButton: true,
+            showDenyButton: true,
             confirmButtonText: "Continuar",
+            denyButtonText: "Agregar fecha",
             cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
         });
 
-        if (!date) return;
+        if (result.isDenied) {
+            return await openAddDateSchedulesDialog(petition);
+        }
+
+        const date = result.value;
+        if (!result.isConfirmed || !date) return false;
 
         const normalizedDate = String(date).slice(0, 10);
 
         const resultExisting = await getPetitionSchedules(petition.id, normalizedDate);
         const existing = resultExisting.success ? (resultExisting.data || []) : [];
-        await openSlotsSelectorDialog({ petition, date: normalizedDate, existing, requireAtLeastOne: false });
+        return await openSlotsSelectorDialog({ petition, date: normalizedDate, existing, requireAtLeastOne: false });
     };
 
     const openSlotsSelectorDialog = async ({ petition, date, existing, requireAtLeastOne = true }) => {
@@ -475,7 +501,7 @@ const Petition = () => {
             `;
         }).join("");
 
-        const { value: selectedKeys } = await Swal.fire({
+        const { value: selectedKeys, isConfirmed } = await Swal.fire({
             title: `Horarios (${date})`,
             html: `
                 <div class="text-left flex flex-col gap-2">
@@ -494,7 +520,7 @@ const Petition = () => {
                         </button>
                     </div>
                     <p class="text-xs text-gray-500">
-                        Cupos por horario: disponible/maximo (ejemplo: 2/2).
+                        Cupos por horario: disponible/máximo (ejemplo: 2/2).
                     </p>
                     <div class="grid grid-cols-2 gap-2">${slotOptions}</div>
                 </div>
@@ -503,6 +529,8 @@ const Petition = () => {
             showCancelButton: true,
             confirmButtonText: requireAtLeastOne ? "Crear" : "Guardar",
             cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
             didOpen: () => {
                 const popup = Swal.getPopup();
                 if (!popup) return;
@@ -552,8 +580,8 @@ const Petition = () => {
                 const checked = Array.from(document.querySelectorAll("input[data-slot]:checked"))
                     .map((el) => el.getAttribute("data-slot"));
 
-                if (requireAtLeastOne && checked.length === 0) {
-                    Swal.showValidationMessage("Debes seleccionar al menos un horario");
+                if (checked.length === 0) {
+                    Swal.showValidationMessage("Debes seleccionar al menos un horario para esta fecha.");
                     return false;
                 }
 
@@ -561,8 +589,9 @@ const Petition = () => {
             },
         });
 
-        if (!selectedKeys) return;
+        if (!isConfirmed || !selectedKeys) return false;
         await saveScheduleDiff({ petition, date, existing, selectedKeys });
+        return true;
     };
 
     const saveScheduleDiff = async ({ petition, date, existing, selectedKeys }) => {
@@ -649,8 +678,10 @@ const Petition = () => {
     const getRowInfo = (petition) => {
         const allSchedules = schedulesByPetition[petition.id] || [];
         const dates = getRecentDateOptions(allSchedules);
+        const selectableDates = dates.filter((dateValue) => getGlobalQuotaByDate(dateValue).available > 0);
         const selectedStoredDate = selectedDateByPetition[petition.id];
-        const selectedDate = (selectedStoredDate && dates.includes(selectedStoredDate)) ? selectedStoredDate : (dates[0] || null);
+        const fallbackDate = selectableDates[0] || dates[0] || null;
+        const selectedDate = (selectedStoredDate && dates.includes(selectedStoredDate)) ? selectedStoredDate : fallbackDate;
         const daySchedules = selectedDate
             ? allSchedules
                 .filter((s) => s.date === selectedDate)
@@ -683,6 +714,7 @@ const Petition = () => {
         return {
             selectedDate,
             dateOptions: dates,
+            selectableDates,
             dateLabel: selectedDate ? formatDate(selectedDate) : "Sin fechas",
             dateQuotaLabel: `${globalQuota.available}/${globalQuota.max}`,
             scheduleOptions: daySchedules.map((s) => ({
@@ -712,12 +744,14 @@ const Petition = () => {
 
     const handleCreate = async () => {
         if (isFuncionarioLockedByActivePeriod) {
-            showErrorAlert("Bloqueado", "No puedes crear peticiones mientras hay un perÃ­odo activo.");
+            showErrorAlert("Bloqueado", "No puedes crear peticiones mientras hay un período activo.");
             return;
         }
 
-        const formData = await petitionDialog();
-        if (!formData) return;
+        const result = await petitionDialog();
+        if (!result || !result.data) return;
+
+        const formData = result.data;
 
         const response = await createPetition(formData);
         if (!response.success) {
@@ -725,18 +759,74 @@ const Petition = () => {
             return;
         }
 
+        if (result.action !== "save_and_schedule") {
+            await fetchPetitions();
+            Swal.fire({
+                toast: true,
+                icon: "success",
+                title: "Peticion creada",
+                timer: 2500,
+                position: "bottom-end",
+                showConfirmButton: false,
+            });
+            return;
+        }
+
+        const scheduleConfigured = await openAddDateSchedulesDialog(response.data);
+
+        if (!scheduleConfigured) {
+            const keepResult = await Swal.fire({
+                title: "Peticion sin horarios",
+                text: "Cancelaste la definición de fecha y hora. ¿Quieres conservar la petición sin horarios?",
+                icon: "question",
+                showCancelButton: true,
+                confirmButtonText: "Conservar",
+                cancelButtonText: "Eliminar",
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+            });
+
+            if (!keepResult.isConfirmed) {
+                const deleteResponse = await deletePetition(response.data.id);
+                if (!deleteResponse.success) {
+                    showErrorAlert("Error", deleteResponse.message || "No se pudo eliminar la petición creada");
+                    return;
+                }
+
+                Swal.fire({
+                    toast: true,
+                    icon: "info",
+                    title: "Peticion eliminada por no definir horarios",
+                    timer: 3000,
+                    position: "bottom-end",
+                    showConfirmButton: false,
+                });
+                await fetchPetitions();
+                return;
+            }
+
+            await fetchPetitions();
+            return;
+        }
+
         await fetchPetitions();
-        await openAddDateSchedulesDialog(response.data);
     };
 
     const handleEdit = async (petition) => {
         if (isFuncionarioLockedByActivePeriod) {
-            showErrorAlert("Bloqueado", "No puedes editar peticiones mientras hay un perÃ­odo activo.");
+            showErrorAlert("Bloqueado", "No puedes editar peticiones mientras hay un período activo.");
             return;
         }
 
-        const formData = await petitionDialog(petition);
-        if (!formData) return;
+        const result = await petitionDialog(petition);
+        if (!result) return;
+
+        if (result.action === "schedule") {
+            await openDefineScheduleDialog(petition);
+            return;
+        }
+
+        const formData = result.data;
 
         const response = await updatePetition(petition.id, formData);
         if (response.success) {
@@ -756,7 +846,7 @@ const Petition = () => {
 
     const handleDelete = async (petition) => {
         if (isFuncionarioLockedByActivePeriod) {
-            showErrorAlert("Bloqueado", "No puedes eliminar peticiones mientras hay un perÃ­odo activo.");
+            showErrorAlert("Bloqueado", "No puedes eliminar peticiones mientras hay un período activo.");
             return;
         }
 
@@ -897,11 +987,31 @@ const Petition = () => {
     });
     const isCitizenPeriodClosed = isCiudadano && !activePeriod;
 
-    const hasActiveCitizenAppointmentInPetition = (petitionId) =>
+    const hasActiveCitizenReservationOnDate = (dateValue) => {
+        if (!dateValue) return false;
+
+        const hasAppointment = citizenAppointments.some((appointment) => {
+            if (!["pendiente", "aprobado"].includes(appointment?.status)) return false;
+            return appointment?.schedule?.date === dateValue;
+        });
+
+        if (hasAppointment) return true;
+
+        return citizenRequests.some((request) => {
+            if (!["pendiente", "aprobado"].includes(request?.status)) return false;
+            const consumedDate = request?.status === "aprobado" && request?.pickupDate
+                ? request.pickupDate
+                : request?.requestDate;
+            return String(consumedDate || "").slice(0, 10) === dateValue;
+        });
+    };
+
+    const hasActiveCitizenAppointmentInPetitionOnDate = (petitionId, dateValue) =>
         citizenAppointments.some(
             (appointment) =>
                 Number(appointment?.petitionId) === Number(petitionId) &&
-                ["pendiente", "aprobado"].includes(appointment?.status)
+                ["pendiente", "aprobado"].includes(appointment?.status) &&
+                appointment?.schedule?.date === dateValue
         );
 
     const globalDateQuotaMap = Object.fromEntries(
@@ -920,7 +1030,7 @@ const Petition = () => {
                     <div className="flex justify-between items-start gap-4">
                         <div>
                             <h1 className="text-2xl font-bold">Peticiones</h1>
-                            <p className="text-gray-600">Administracion de peticiones del sistema</p>
+                            <p className="text-gray-600">Administración de peticiones del sistema</p>
                         </div>
                         
                         <div className="flex items-start gap-3">
@@ -935,7 +1045,7 @@ const Petition = () => {
                                                 <p className="text-sm text-gray-800 font-medium">{activePeriod.name}</p>
                                             ) : (
                                                 <p className="text-xs text-gray-600">
-                                                    No hay periodo activo. Vuelve a intentarlo cuando se habilite uno.
+                                                    No hay período activo. Vuelve a intentarlo cuando se habilite uno.
                                                 </p>
                                             )}
                                         </div>
@@ -946,8 +1056,8 @@ const Petition = () => {
                                             </p>
                                         )}
                                     </div>
-                </div>
-            )}
+                                </div>
+                            )}
 
                             {(isCiudadano || isSupervisor) && (
                                 <div className="border rounded-lg px-3 py-2 bg-white min-w-[220px]">
@@ -966,26 +1076,26 @@ const Petition = () => {
                                             </option>
                                         ))}
                                     </select>
-                </div>
-            )}
+                                </div>
+                            )}
 
                             {isFuncionario && (
                                 <div className="flex items-start gap-3">
                                     {isFuncionarioLockedByActivePeriod && (
                                         <div className="border border-amber-200 bg-amber-50 rounded-lg px-4 py-2 max-w-[360px]">
                                             <p className="text-sm font-semibold text-amber-700">
-                                                Edicion bloqueada por periodo activo
+                                                Edición bloqueada por período activo
                                             </p>
                                             <p className="text-xs text-amber-800">
-                                                No puedes crear, editar ni eliminar peticiones u horarios mientras exista un periodo activo.
+                                                No puedes crear, editar ni eliminar peticiones u horarios mientras exista un período activo.
                                             </p>
-                </div>
-            )}
+                                        </div>
+                                    )}
 
                                     <button
                                         onClick={handleCreate}
                                         disabled={isFuncionarioLockedByActivePeriod}
-                                        title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un perÃ­odo activo" : ""}
+                                        title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un período activo" : ""}
                                         className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
                                             isFuncionarioLockedByActivePeriod
                                                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
@@ -995,8 +1105,8 @@ const Petition = () => {
                                         <PlusCircle className="h-4 w-4" />
                                         Nueva Peticion
                                     </button>
-                </div>
-            )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1043,7 +1153,10 @@ const Petition = () => {
                                                             className="px-2 py-1.5 text-xs border rounded-md text-indigo-700 border-indigo-200 bg-white"
                                                         >
                                                             {row.dateOptions.map((dateValue) => (
-                                                                <option key={dateValue} value={dateValue}>
+                                                                <option
+                                                                    key={dateValue}
+                                                                    value={dateValue}
+                                                                >
                                                                     {formatDate(dateValue)}
                                                                 </option>
                                                             ))}
@@ -1092,21 +1205,9 @@ const Petition = () => {
                                                 <td className="p-3">
                                                     <div className="flex justify-center gap-2">
                                                         <button
-                                                            onClick={() => openDefineScheduleDialog(petition)}
-                                                            disabled={isFuncionarioLockedByActivePeriod}
-                                                            title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un perÃ­odo activo" : ""}
-                                                            className={`px-3 py-1.5 text-xs border rounded-md ${
-                                                                isFuncionarioLockedByActivePeriod
-                                                                    ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
-                                                                    : "text-indigo-800 border-indigo-200 bg-indigo-100 hover:bg-indigo-200"
-                                                            }`}
-                                                        >
-                                                            Fecha y Hora
-                                                        </button>
-                                                        <button
                                                             onClick={() => handleEdit(petition)}
                                                             disabled={isFuncionarioLockedByActivePeriod}
-                                                            title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un perÃ­odo activo" : ""}
+                                                            title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un período activo" : ""}
                                                             className={`px-3 py-1.5 text-xs border rounded-md ${
                                                                 isFuncionarioLockedByActivePeriod
                                                                     ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
@@ -1118,7 +1219,7 @@ const Petition = () => {
                                                         <button
                                                             onClick={() => handleDelete(petition)}
                                                             disabled={isFuncionarioLockedByActivePeriod}
-                                                            title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un perÃ­odo activo" : ""}
+                                                            title={isFuncionarioLockedByActivePeriod ? "Bloqueado mientras hay un período activo" : ""}
                                                             className={`px-3 py-1.5 text-xs border rounded-md ${
                                                                 isFuncionarioLockedByActivePeriod
                                                                     ? "text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed"
@@ -1134,10 +1235,10 @@ const Petition = () => {
                                     })}
                                 </tbody>
                             </table>
-                </div>
-            )}
+                        </div>
+                    )}
 
-                    {!loading && petitions.length > 0 && !isFuncionario && (
+                    {!loading && petitions.length > 0 && !isFuncionario && (!isCiudadano || !!activePeriod) && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {visiblePetitionsForCitizen.map((petition) => (
                                 (() => {
@@ -1148,14 +1249,19 @@ const Petition = () => {
                                         petitionDateOptions[0] ||
                                         "";
                                     const quotaInfo = getCitizenQuotaInfo(petition, localSelectedDate);
-                                    const hasOwnAppointmentInPetition = isCiudadano && hasActiveCitizenAppointmentInPetition(petition.id);
+                                    const hasOwnAppointmentInPetition = isCiudadano &&
+                                        hasActiveCitizenAppointmentInPetitionOnDate(petition.id, localSelectedDate);
+                                    const hasOwnReservationOnDate = isCiudadano && hasActiveCitizenReservationOnDate(localSelectedDate);
+                                    const hasReservationOnOtherOption = hasOwnReservationOnDate && !hasOwnAppointmentInPetition;
                                     const isDateQuotaClosed = isCiudadano && Number(quotaInfo?.globalAvailable ?? 0) <= 0;
                                     const isHoursClosed = isCiudadano && !isDateQuotaClosed && Number(quotaInfo?.available ?? 0) <= 0;
                                     const shouldAlertOwnAppointment =
-                                        hasOwnAppointmentInPetition &&
+                                        hasReservationOnOtherOption &&
                                         (isDateQuotaClosed || isCitizenPeriodClosed);
                                     const selectLabel = hasOwnAppointmentInPetition
-                                        ? "Con cupo"
+                                        ? "Ya reservado"
+                                        : hasReservationOnOtherOption
+                                            ? "Ya reservada"
                                         : isCitizenPeriodClosed
                                             ? "Periodo cerrado"
                                             : isDateQuotaClosed
@@ -1174,16 +1280,25 @@ const Petition = () => {
                                     onDateChange={selectedCitizenDate ? null : handleCitizenCardDateChange}
                                     onView={handleViewPetitionDetails}
                                     onSelect={openViewSchedule}
-                                    selectBlocked={shouldAlertOwnAppointment || (!hasOwnAppointmentInPetition && (isCitizenPeriodClosed || isDateQuotaClosed || isHoursClosed))}
-                                    selectDanger={!hasOwnAppointmentInPetition && isHoursClosed}
+                                    selectBlocked={shouldAlertOwnAppointment || hasOwnAppointmentInPetition || hasReservationOnOtherOption || (!hasOwnReservationOnDate && (isCitizenPeriodClosed || isDateQuotaClosed || isHoursClosed))}
+                                    selectDanger={!hasOwnReservationOnDate && isHoursClosed}
                                     selectSuccess={hasOwnAppointmentInPetition}
                                     selectLabel={selectLabel}
                                     onBlockedSelect={() => {
-                                        if (shouldAlertOwnAppointment) {
+                                        if (hasOwnAppointmentInPetition) {
                                             return Swal.fire({
                                                 icon: "info",
-                                                title: "Ya tienes una hora tomada",
-                                                text: "Revisala en Mis inscripciones.",
+                                                title: "Ya tienes una reserva en esta petición",
+                                                text: "Puedes revisarla en Mis inscripciones.",
+                                                confirmButtonText: "Entendido",
+                                            });
+                                        }
+
+                                        if (shouldAlertOwnAppointment || hasReservationOnOtherOption) {
+                                            return Swal.fire({
+                                                icon: "info",
+                                                title: "Ya tienes una reserva en esa fecha",
+                                                text: "Solo puedes tomar una reserva por fecha en el sistema.",
                                                 confirmButtonText: "Entendido",
                                             });
                                         }
@@ -1192,7 +1307,7 @@ const Petition = () => {
                                             return Swal.fire({
                                                 icon: "warning",
                                                 title: "Periodo cerrado",
-                                                text: "Solo puedes tomar horas cuando el periodo este activo.",
+                                                text: "Solo puedes tomar horas cuando el período esté activo.",
                                                 confirmButtonText: "Entendido",
                                             });
                                         }
@@ -1217,10 +1332,16 @@ const Petition = () => {
                                     );
                                 })()
                             ))}
-                </div>
-            )}
+                        </div>
+                    )}
 
-                    {!loading && !isFuncionario && petitions.length > 0 && visiblePetitionsForCitizen.length === 0 && (
+                    {!loading && isCiudadano && !activePeriod && (
+                        <p className="text-sm text-amber-700 italic">
+                            No hay un período activo para visualizar peticiones disponibles para inscripción.
+                        </p>
+                    )}
+
+                    {!loading && !isFuncionario && petitions.length > 0 && (!isCiudadano || !!activePeriod) && visiblePetitionsForCitizen.length === 0 && (
                         <p className="text-sm text-gray-500 italic">
                             No hay peticiones con horarios para la fecha seleccionada.
                         </p>
@@ -1265,8 +1386,39 @@ export default Petition;
 
 async function petitionDialog(existingPetition = null) {
     const isEdit = !!existingPetition;
+    const readDialogData = () => {
+        const name = document.getElementById("name").value.trim();
+        const description = document.getElementById("description").value.trim();
+        const objectives = document.getElementById("objectives").value.trim();
+        const prerrequisites = document.getElementById("prerrequisites").value.trim();
 
-    const { value: formValues } = await Swal.fire({
+        if (!name || name.length < 3) {
+            Swal.showValidationMessage("Nombre minimo 3 caracteres");
+            return false;
+        }
+        if (!description || description.length < 10) {
+            Swal.showValidationMessage("Descripcion minimo 10 caracteres");
+            return false;
+        }
+        if (!objectives || objectives.length < 10) {
+            Swal.showValidationMessage("Objetivos minimo 10 caracteres");
+            return false;
+        }
+        if (prerrequisites.length > 255) {
+            Swal.showValidationMessage("Prerrequisitos máximo 255 caracteres");
+            return false;
+        }
+
+        return {
+            name,
+            description,
+            objectives,
+            prerrequisites,
+            dailyQuotas: existingPetition?.dailyQuotas ?? 15,
+        };
+    };
+    {/*Listado*/}
+    const result = await Swal.fire({
         html: `
         <div class="text-start flex flex-col gap-3">
             <h2 class="text-lg font-bold">
@@ -1297,41 +1449,31 @@ async function petitionDialog(existingPetition = null) {
 
         </div>
         `,
-        confirmButtonText: isEdit ? "Guardar cambios" : "Definir fecha/hora",
+        confirmButtonText: isEdit ? "Guardar" : "Definir fecha/hora",
         confirmButtonColor: "#2563eb",
+        showDenyButton: true,
+        denyButtonText: isEdit ? "Fecha y Hora" : "Guardar",
         showCancelButton: true,
         cancelButtonText: "Cancelar",
         showCloseButton: true,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
         focusConfirm: false,
-        preConfirm: () => {
-            const name = document.getElementById("name").value.trim();
-            const description = document.getElementById("description").value.trim();
-            const objectives = document.getElementById("objectives").value.trim();
-            const prerrequisites = document.getElementById("prerrequisites").value.trim();
-            if (!name || name.length < 3) {
-                return Swal.showValidationMessage("Nombre minimo 3 caracteres"), false;
-            }
-            if (!description || description.length < 10) {
-                return Swal.showValidationMessage("Descripcion minimo 10 caracteres"), false;
-            }
-            if (!objectives || objectives.length < 10) {
-                return Swal.showValidationMessage("Objetivos minimo 10 caracteres"), false;
-            }
-            if (prerrequisites.length > 255) {
-                return Swal.showValidationMessage("Prerrequisitos maximo 255 caracteres"), false;
-            }
-
-            return {
-                name,
-                description,
-                objectives,
-                prerrequisites,
-                dailyQuotas: existingPetition?.dailyQuotas ?? 15,
-            };
-        },
+        preConfirm: readDialogData,
+        preDeny: isEdit ? undefined : readDialogData,
     });
 
-    return formValues || null;
+    if (result.isDenied) {
+        if (isEdit) return { action: "schedule" };
+        return { action: "save", data: result.value };
+    }
+
+    if (!result.isConfirmed || !result.value) return null;
+
+    return {
+        action: isEdit ? "save" : "save_and_schedule",
+        data: result.value,
+    };
 }
 
 

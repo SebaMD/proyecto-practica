@@ -23,7 +23,7 @@ const Period = () => {
             const data = await getPeriods();
             setPeriods(Array.isArray(data) ? data : []);
         } catch (error) {
-            showErrorAlert("Error", "No se pudieron cargar los periodos", error);
+            showErrorAlert("Error", "No se pudieron cargar los períodos", error);
             setPeriods([]);
         } finally {
             setLoading(false);
@@ -75,6 +75,9 @@ const Period = () => {
     };
 
     const getDateOnly = (value) => String(value || "").slice(0, 10);
+    // Cambio pendiente para después de las pruebas:
+    // para exigir una duración mínima de 2 días también en frontend.
+    // const PERIOD_MIN_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 
     const openPeriodModal = async (period = null) => {
         const isEdit = !!period;
@@ -104,7 +107,7 @@ const Period = () => {
         const uniqueBlockedDays = [...new Set(blockedDaysByOtherPeriods)];
 
         const result = await Swal.fire({
-            title: isEdit ? "Editar periodo" : "Crear periodo",
+            title: isEdit ? "Editar período" : "Crear período",
             html: `
                 <div class="flex flex-col gap-4 text-left">
                     <div>
@@ -120,7 +123,7 @@ const Period = () => {
                         <input id="closingDate" class="swal2-input m-0" value="${toLocalDateTime(period?.closingDate)}">
                     </div>
                     <p class="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-2">
-                        Reglas: no fechas pasadas y no fechas usadas por otros periodos.
+                        Reglas: no fechas pasadas y no fechas usadas por otros períodos.
                     </p>
                     ${
                         isEditActivePeriod
@@ -132,6 +135,8 @@ const Period = () => {
             showCancelButton: true,
             confirmButtonText: isEdit ? "Guardar" : "Crear",
             cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
             didOpen: () => {
                 const startInput = document.getElementById("startDate");
                 const closingInput = document.getElementById("closingDate");
@@ -198,7 +203,7 @@ const Period = () => {
                 }
 
                 if (uniqueBlockedDays.includes(getDateOnly(closingDate))) {
-                    Swal.showValidationMessage("La fecha de termino cae en un rango usado por otro periodo");
+                    Swal.showValidationMessage("La fecha de término cae en un rango usado por otro período");
                     return false;
                 }
 
@@ -209,7 +214,7 @@ const Period = () => {
                     }
 
                     if (uniqueBlockedDays.includes(getDateOnly(startDate))) {
-                        Swal.showValidationMessage("La fecha de inicio cae en un rango usado por otro periodo");
+                        Swal.showValidationMessage("La fecha de inicio cae en un rango usado por otro período");
                         return false;
                     }
 
@@ -217,9 +222,21 @@ const Period = () => {
                         Swal.showValidationMessage("La fecha de termino debe ser posterior a la de inicio");
                         return false;
                     }
-                } else if (new Date(closingDate) <= new Date(period.startDate)) {
-                    Swal.showValidationMessage("La fecha de termino debe ser posterior a la de inicio");
-                    return false;
+
+                    // if ((new Date(closingDate).getTime() - new Date(startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
+                    //     Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
+                    //     return false;
+                    // }
+                } else {
+                    if (new Date(closingDate) <= new Date(period.startDate)) {
+                        Swal.showValidationMessage("La fecha de termino debe ser posterior a la de inicio");
+                        return false;
+                    }
+
+                    // if ((new Date(closingDate).getTime() - new Date(period.startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
+                    //     Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
+                    //     return false;
+                    // }
                 }
 
                 try {
@@ -244,7 +261,7 @@ const Period = () => {
                     }
                     return true;
                 } catch (error) {
-                    Swal.showValidationMessage(error.response?.data?.message || "Error al guardar el periodo");
+                    Swal.showValidationMessage(error.response?.data?.message || "Error al guardar el período");
                     return false;
                 }
             },
@@ -261,19 +278,21 @@ const Period = () => {
         if (targetPeriod && isPeriodActive(targetPeriod)) {
             showErrorAlert(
                 "Periodo activo",
-                "No se puede eliminar un periodo activo. Solo puedes modificar su fecha de termino."
+                "No se puede eliminar un período activo. Solo puedes modificar su fecha de término."
             );
             return;
         }
 
         const result = await Swal.fire({
-            title: "Eliminar periodo?",
-            text: "Esta accion no se puede deshacer",
+            title: "¿Eliminar período?",
+            text: "Esta acción no se puede deshacer",
             icon: "warning",
             showCancelButton: true,
             confirmButtonColor: "#dc2626",
             confirmButtonText: "Eliminar",
             cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
         });
 
         if (result.isConfirmed) {
@@ -282,7 +301,7 @@ const Period = () => {
                 showSuccessAlert("Eliminado", "Periodo eliminado correctamente");
                 fetchPeriods();
             } catch {
-                showErrorAlert("Error", "No se pudo eliminar el periodo");
+                showErrorAlert("Error", "No se pudo eliminar el período");
             }
         }
     };
@@ -295,7 +314,7 @@ const Period = () => {
                 <div className="bg-white border rounded-xl p-6 flex flex-col gap-6">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h1 className="text-xl font-bold">Gestion de periodos</h1>
+                            <h1 className="text-xl font-bold">Gestión de períodos</h1>
                             <p className="text-gray-500 text-sm">
                                 Define los rangos de fechas para la toma de horas
                             </p>
@@ -306,7 +325,7 @@ const Period = () => {
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
                         >
                             <CalendarPlus className="h-4 w-4" />
-                            Nuevo periodo
+                            Nuevo período
                         </button>
                     </div>
 
@@ -330,7 +349,7 @@ const Period = () => {
                                 ) : periods.length === 0 ? (
                                     <tr>
                                         <td colSpan={4} className="p-4 text-center text-gray-500">
-                                            No hay periodos registrados
+                                            No hay períodos registrados
                                         </td>
                                     </tr>
                                 ) : (

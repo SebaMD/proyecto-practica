@@ -11,6 +11,7 @@ import { getRequests,
 import { getPetitions } from "@services/petition.service";
 import { getPetitionSchedules } from "@services/petitionSchedule.service";
 import { getActivePeriod } from "@services/period.service";
+import { getAppointments } from "@services/appointment.service";
 
 import { showErrorAlert } from "@helpers/sweetAlert";
 import { useAuth } from "@context/AuthContext";
@@ -41,6 +42,7 @@ const Requests = () => {
     const [requests, setRequests] = useState([]);
     const [petitions, setPetitions] = useState([]);
     const [schedulesByPetition, setSchedulesByPetition] = useState({});
+    const [citizenAppointments, setCitizenAppointments] = useState([]);
 
     const [showPending, togglePending] = useState(true);
     const [showApproved, toggleApproved] = useState(true);
@@ -54,6 +56,7 @@ const Requests = () => {
     const [requestReportDate, setRequestReportDate] = useState("");
     const [requestReportDates, setRequestReportDates] = useState([]);
     const [requestReportStatusMessage, setRequestReportStatusMessage] = useState("");
+    const [selectedRequestDate, setSelectedRequestDate] = useState("");
 
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
@@ -114,13 +117,28 @@ const Requests = () => {
                 setSchedulesByPetition(newSchedulesMap);
             }
         } catch (error) {
-            console.error("Error al obtener peticiones para renovacion:", error);
+            console.error("Error al obtener peticiones para renovación:", error);
         }
     };
 
     const fetchActivePeriod = async () => {
         const period = await getActivePeriod();
         setActivePeriod(period || null);
+    };
+
+    const fetchCitizenAppointments = async () => {
+        if (!isCiudadano) return;
+        try {
+            const result = await getAppointments();
+            if (!result.success) {
+                setCitizenAppointments([]);
+                return;
+            }
+            setCitizenAppointments(result.data || []);
+        } catch (error) {
+            console.error("Error al obtener inscripciones del ciudadano:", error);
+            setCitizenAppointments([]);
+        }
     };
 
     const fetchRequestDateUsage = async () => {
@@ -142,6 +160,7 @@ const Requests = () => {
         const handleScheduleUpdated = async () => {
             if (!isCiudadano) return;
             await fetchRenewalPetitions();
+            await fetchCitizenAppointments();
         };
 
         const handleRequestUsageUpdated = async () => {
@@ -175,7 +194,7 @@ const Requests = () => {
             Swal.fire({
                 icon: "warning",
                 title: "Periodo cerrado",
-                text: "No puedes solicitar renovacion mientras no exista un periodo activo.",
+                text: "No puedes solicitar renovación mientras no exista un período activo.",
                 confirmButtonText: "Entendido",
             });
             return;
@@ -191,7 +210,7 @@ const Requests = () => {
                 Swal.fire({
                     toast: true,
                     icon: "success",
-                    title: "Solicitud de renovacion creada exitosamente",
+                    title: "Solicitud de renovación creada exitosamente",
                     timer: 4000,
                     position: "bottom-end",
                     showConfirmButton: false,
@@ -207,13 +226,13 @@ const Requests = () => {
             }
         } catch (error) {
             console.error("Error al crear solicitud:", error);
-            showErrorAlert("Error", "No se pudo crear la solicitud de renovacion");
+            showErrorAlert("Error", "No se pudo crear la solicitud de renovación");
         }
     };
 
     const handleViewPetitionDetails = async (petition) => {
         await Swal.fire({
-            title: "Detalle de la peticion",
+            title: "Detalle de la petición",
             width: 760,
             html: `
                 <div class="text-left flex flex-col gap-3">
@@ -225,8 +244,9 @@ const Requests = () => {
                         <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Descripcion</p>
                         <p class="text-sm text-gray-800 whitespace-pre-wrap">${petition.description || "-"}</p>
                     </div>
-                    <div class="border rounded-lg p-3 bg-blue-50 border-blue-200">
-                        <p class="text-sm text-blue-900">La fecha y hora de retiro se asignaran segun la fecha solicitada y disponibilidad.</p>
+                    <div class="border rounded-lg p-3 bg-blue-50 border-blue-200 flex flex-col gap-1">
+                        <p class="text-sm text-blue-900">La hora de retiro se asignara segun la fecha solicitada y la disponibilidad.</p>
+                        <p class="text-sm text-blue-900">Importante: al renovar la licencia, debes realizar examen visual en el mismo lugar de renovación.</p>
                     </div>
                 </div>
             `,
@@ -297,6 +317,13 @@ const Requests = () => {
     const renewalPetitions = petitions.filter((petition) => (schedulesByPetition[petition.id] || []).length > 0);
     const isRenewalPeriodClosed = isCiudadano && !activePeriod;
     const [selectedRenewalDateByPetition, setSelectedRenewalDateByPetition] = useState({});
+    const availableRequestDates = [...new Set(
+        renewalPetitions
+            .flatMap((petition) => schedulesByPetition[petition.id] || [])
+            .map((schedule) => schedule?.date)
+            .filter(Boolean)
+            .map((date) => String(date).slice(0, 10))
+    )].sort();
 
     const handleRenewalDateChange = (petition, dateValue) => {
         setSelectedRenewalDateByPetition((prev) => ({
@@ -305,11 +332,35 @@ const Requests = () => {
         }));
     };
 
-    const hasActiveRenewalInPetition = (petitionId) =>
+    const hasActiveCitizenReservationOnDate = (dateValue) => {
+        if (!dateValue) return false;
+
+        const hasAppointment = citizenAppointments.some((appointment) => {
+            if (!["pendiente", "aprobado"].includes(appointment?.status)) return false;
+            return appointment?.schedule?.date === dateValue;
+        });
+
+        if (hasAppointment) return true;
+
+        return requests.some((request) => {
+            if (!["pendiente", "aprobado"].includes(request?.status)) return false;
+            const consumedDate = request?.status === "aprobado" && request?.pickupDate
+                ? request.pickupDate
+                : request?.requestDate;
+            return String(consumedDate || "").slice(0, 10) === dateValue;
+        });
+    };
+
+    const hasActiveRenewalInPetitionOnDate = (petitionId, dateValue) =>
         requests.some(
             (request) =>
                 Number(request?.petitionId) === Number(petitionId) &&
-                ["pendiente", "aprobado"].includes(request?.status)
+                ["pendiente", "aprobado"].includes(request?.status) &&
+                String(
+                    request?.status === "aprobado" && request?.pickupDate
+                        ? request.pickupDate
+                        : request?.requestDate || ""
+                ).slice(0, 10) === dateValue
         );
 
     const fetchRequestReportDates = async () => {
@@ -365,11 +416,19 @@ const Requests = () => {
             fetchRenewalPetitions();
             fetchActivePeriod();
             fetchRequestDateUsage();
+            fetchCitizenAppointments();
         } else {
             fetchRequestReportDates();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const visibleFuncionarioRequests = requests.filter((r) => {
+        if (r.status === "pendiente" && showPending && isFuncionarioPendingView) return true;
+        if (r.status === "aprobado" && showApproved && isFuncionarioReviewsView) return true;
+        if (r.status === "rechazado" && showRejected && isFuncionarioReviewsView) return true;
+        return false;
+    });
 
     return (
         <div className="min-h-screen bg-gray-100">
@@ -379,11 +438,11 @@ const Requests = () => {
                 <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
                     <div className="flex justify-between items-start gap-4">
                         <div>
-                            <h1 className="text-2xl font-bold">Renovacion de licencia</h1>
+                            <h1 className="text-2xl font-bold">Renovación de licencia</h1>
                             <p className="text-gray-600">
                                 {isCiudadano
-                                    ? "Solicita la renovacion y espera la programacion del retiro de tu licencia."
-                                    : "Revisa y responde solicitudes de renovacion de licencia."}
+                                    ? "Solicita la renovación y espera la programación del retiro de tu licencia."
+                                    : "Revisa y responde solicitudes de renovación de licencia."}
                             </p>
                         </div>
 
@@ -419,26 +478,46 @@ const Requests = () => {
                         )}
 
                         {isCiudadano && (
-                            <div className={`border rounded-lg px-4 py-2 min-w-[380px] ${activePeriod ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex flex-col">
-                                        <p className={`text-sm font-semibold ${activePeriod ? "text-green-700" : "text-amber-700"}`}>
-                                            {activePeriod ? "Periodo activo" : "Periodo cerrado"}
-                                        </p>
-                                        {activePeriod ? (
-                                            <p className="text-sm text-gray-800 font-medium">{activePeriod.name}</p>
-                                        ) : (
-                                            <p className="text-xs text-gray-600">
-                                                No hay periodo activo. Vuelve a intentarlo cuando se habilite uno.
+                            <div className="flex items-start gap-3">
+                                <div className={`border rounded-lg px-4 py-2 min-w-[380px] ${activePeriod ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex flex-col">
+                                            <p className={`text-sm font-semibold ${activePeriod ? "text-green-700" : "text-amber-700"}`}>
+                                                {activePeriod ? "Periodo activo" : "Periodo cerrado"}
+                                            </p>
+                                            {activePeriod ? (
+                                                <p className="text-sm text-gray-800 font-medium">{activePeriod.name}</p>
+                                            ) : (
+                                                <p className="text-xs text-gray-600">
+                                                    No hay período activo. Vuelve a intentarlo cuando se habilite uno.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {activePeriod && (
+                                            <p className="text-xs text-gray-600 whitespace-nowrap">
+                                                {formatDate(activePeriod.startDate)} - {formatDate(activePeriod.closingDate)}
                                             </p>
                                         )}
                                     </div>
+                                </div>
 
-                                    {activePeriod && (
-                                        <p className="text-xs text-gray-600 whitespace-nowrap">
-                                            {formatDate(activePeriod.startDate)} - {formatDate(activePeriod.closingDate)}
-                                        </p>
-                                    )}
+                                <div className="border rounded-lg px-3 py-2 bg-white min-w-[220px]">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">
+                                        Filtrar por fecha
+                                    </label>
+                                    <select
+                                        value={selectedRequestDate}
+                                        onChange={(e) => setSelectedRequestDate(e.target.value)}
+                                        className="w-full border rounded-md px-2 py-1 text-sm"
+                                    >
+                                        <option value="">Todas las fechas</option>
+                                        {availableRequestDates.map((dateValue) => (
+                                            <option key={dateValue} value={dateValue}>
+                                                {formatDate(dateValue)}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
                         )}
@@ -498,7 +577,7 @@ const Requests = () => {
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-gray-500 italic">No tienes solicitudes de renovacion pendientes</p>
+                                        <p className="text-gray-500 italic">No tienes solicitudes de renovación pendientes</p>
                                     )}
                                 </div>
 
@@ -513,7 +592,7 @@ const Requests = () => {
                                     ) : (
                                         <p className="text-gray-500 italic flex items-center gap-2">
                                             <MessageSquareDashedIcon size={18} />
-                                            Aun no hay renovaciones revisadas
+                                            Aún no hay renovaciones revisadas
                                         </p>
                                     )}
                                 </div>
@@ -521,48 +600,68 @@ const Requests = () => {
 
                             <div className="flex flex-col gap-4">
                                 <div className="flex items-center justify-between gap-3">
-                                    <h3 className="text-xl font-semibold">Peticiones disponibles para renovacion</h3>
-                                    {!loading && renewalPetitions.length > 0 && (
+                                    <h3 className="text-xl font-semibold">Peticiones disponibles para renovación</h3>
+                                    {!loading && renewalPetitions.length > 0 && (!isCiudadano || !!activePeriod) && (
                                         <Badge type="info" text={`${renewalPetitions.length} Peticion(es)`} />
                                     )}
                                 </div>
 
-                                {!loading && renewalPetitions.length > 0 && (
+                                {!loading && renewalPetitions.length > 0 && (!isCiudadano || !!activePeriod) && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {renewalPetitions.map((petition) => {
-                                        const localSelectedDate = selectedRenewalDateByPetition[petition.id] || "";
-                                        const quotaInfo = getQuotaInfoForRenewalPetition(petition, localSelectedDate);
+                                        const preferredDate = selectedRequestDate || selectedRenewalDateByPetition[petition.id] || "";
+                                        const quotaInfo = getQuotaInfoForRenewalPetition(petition, preferredDate);
                                         const dateOptions = [...new Set((schedulesByPetition[petition.id] || []).map((s) => s.date))].sort();
+                                        const visibleDateOptions = selectedRequestDate ? [selectedRequestDate] : dateOptions;
+                                        const localSelectedDate = selectedRequestDate || selectedRenewalDateByPetition[petition.id] || quotaInfo?.date || dateOptions[0] || "";
                                         const isRenewalQuotaClosed = Number(quotaInfo?.globalAvailable ?? 0) <= 0;
-                                        const hasOwnActiveRenewal = isCiudadano && hasActiveRenewalInPetition(petition.id);
+                                        const hasOwnActiveRenewal = isCiudadano &&
+                                            hasActiveRenewalInPetitionOnDate(petition.id, localSelectedDate);
+                                        const hasOwnReservationOnDate = isCiudadano && hasActiveCitizenReservationOnDate(localSelectedDate);
+                                        const hasReservationOnOtherOption = hasOwnReservationOnDate && !hasOwnActiveRenewal;
+
+                                        if (selectedRequestDate && !dateOptions.includes(selectedRequestDate)) {
+                                            return null;
+                                        }
 
                                         return (
                                             <PetitionCard
                                                 key={`renewal-petition-${petition.id}`}
                                                 petition={petition}
                                                 quotaInfo={quotaInfo}
-                                                dateOptions={dateOptions}
+                                                dateOptions={visibleDateOptions}
                                                 selectedDateValue={localSelectedDate}
-                                                onDateChange={handleRenewalDateChange}
+                                                onDateChange={selectedRequestDate ? null : handleRenewalDateChange}
                                                 onView={handleViewPetitionDetails}
                                                 onSelect={(selectedPetition) => handleCreateRequest(selectedPetition)}
                                                 selectLabel={
                                                     hasOwnActiveRenewal
-                                                        ? "Con cupo"
+                                                        ? "Ya reservado"
+                                                        : hasReservationOnOtherOption
+                                                            ? "Ya reservada"
                                                         : isRenewalPeriodClosed
                                                             ? "Periodo cerrado"
                                                             : isRenewalQuotaClosed
                                                                 ? "Sin cupos"
-                                                                : "Solicitar renovacion"
+                                                                : "Solicitar renovación"
                                                 }
-                                                selectBlocked={hasOwnActiveRenewal || isRenewalPeriodClosed || isRenewalQuotaClosed}
+                                                selectBlocked={hasOwnActiveRenewal || hasReservationOnOtherOption || isRenewalPeriodClosed || isRenewalQuotaClosed}
                                                 selectSuccess={hasOwnActiveRenewal}
                                                 onBlockedSelect={() => {
                                                     if (hasOwnActiveRenewal) {
                                                         return Swal.fire({
                                                             icon: "info",
-                                                            title: "Ya tienes una solicitud",
-                                                            text: "Revisa tu solicitud en Solicitudes pendientes o Historial de renovaciones.",
+                                                            title: "Ya tienes una reserva en esta petición",
+                                                            text: "Puedes revisarla en Solicitudes pendientes o Historial de renovaciones.",
+                                                            confirmButtonText: "Entendido",
+                                                        });
+                                                    }
+
+                                                    if (hasReservationOnOtherOption) {
+                                                        return Swal.fire({
+                                                            icon: "info",
+                                                            title: "Ya tienes una reserva en esa fecha",
+                                                            text: "Solo puedes tomar una reserva por fecha en el sistema.",
                                                             confirmButtonText: "Entendido",
                                                         });
                                                     }
@@ -571,7 +670,7 @@ const Requests = () => {
                                                         return Swal.fire({
                                                             icon: "warning",
                                                             title: "Periodo cerrado",
-                                                            text: "No puedes solicitar renovacion mientras no exista un periodo activo.",
+                                                            text: "No puedes solicitar renovación mientras no exista un período activo.",
                                                             confirmButtonText: "Entendido",
                                                         });
                                                     }
@@ -579,7 +678,7 @@ const Requests = () => {
                                                     return Swal.fire({
                                                         icon: "warning",
                                                         title: "Sin cupos hoy",
-                                                        text: "No hay cupos disponibles para renovacion hoy. Intenta con otra fecha.",
+                                                        text: "No hay cupos disponibles para renovación hoy. Intenta con otra fecha.",
                                                         confirmButtonText: "Entendido",
                                                     });
                                                 }}
@@ -591,8 +690,12 @@ const Requests = () => {
                                     </div>
                                 )}
 
-                                {!loading && renewalPetitions.length === 0 && (
-                                    <p className="text-sm text-gray-500 italic">No hay peticiones con horarios disponibles para renovacion.</p>
+                                {!loading && isCiudadano && !activePeriod && (
+                                    <p className="text-sm text-amber-700 italic">No hay un período activo para visualizar peticiones disponibles para renovación.</p>
+                                )}
+
+                                {!loading && renewalPetitions.length === 0 && (!isCiudadano || !!activePeriod) && (
+                                    <p className="text-sm text-gray-500 italic">No hay peticiones con horarios disponibles para renovación.</p>
                                 )}
                             </div>
                         </div>
@@ -620,7 +723,13 @@ const Requests = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {requests.map((r) => {
+                                        {visibleFuncionarioRequests.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" className="p-4 text-center text-gray-500 italic">
+                                                    No hay solicitudes por revisar
+                                                </td>
+                                            </tr>
+                                        ) : requests.map((r) => {
                                             if (r.status === "pendiente" && showPending && isFuncionarioPendingView) {
                                                 return (
                                                     <RequestCard
@@ -716,10 +825,10 @@ async function createRequestDialog(preselectedPetition = null) {
         `;
 
     const { value } = await Swal.fire({
-        title: "Solicitar renovacion",
+        title: "Solicitar renovación",
         html: `
         ${petitionSelectorHtml}
-        <label class="text-sm font-medium">Motivo de renovacion</label>
+        <label class="text-sm font-medium">Motivo de renovación</label>
         <input id="renewalReason" type="hidden" value="" />
 
         <div id="renewalReasonGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
@@ -736,12 +845,15 @@ async function createRequestDialog(preselectedPetition = null) {
                 id="otherReason"
                 class="mt-2 w-full min-h-[96px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 outline-none transition-all duration-150 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 style="margin:0; resize:none;"
-                placeholder="Escribe el motivo de renovacion"
+                placeholder="Escribe el motivo de renovación"
             ></textarea>
         </div>
         `,
         showCancelButton: true,
+        cancelButtonText: "Cancelar",
         confirmButtonText: "Enviar solicitud",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
         didOpen: () => {
             const reasonInput = document.getElementById("renewalReason");
             const otherWrapper = document.getElementById("otherReasonWrapper");
@@ -791,7 +903,7 @@ async function createRequestDialog(preselectedPetition = null) {
             let description = "";
 
             if (!reason) {
-                Swal.showValidationMessage("Debes seleccionar un motivo de renovacion");
+                Swal.showValidationMessage("Debes seleccionar un motivo de renovación");
                 return false;
             }
 

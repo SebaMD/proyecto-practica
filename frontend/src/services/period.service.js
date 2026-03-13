@@ -1,9 +1,5 @@
 import axios from "./root.service.js";
 
-/**
- * Obtener todos los periodos
- * (funcionario / administrador)
- */
 export const getPeriods = async () => {
     try {
         const response = await axios.get("/periods");
@@ -19,9 +15,6 @@ export const getPeriods = async () => {
     }
 };
 
-/**
- * Crear un nuevo periodo
- */
 export const createPeriod = async (data) => {
     try {
         const response = await axios.post("/periods", data);
@@ -37,9 +30,6 @@ export const createPeriod = async (data) => {
     }
 };
 
-/**
- * Actualizar un periodo
- */
 export const updatePeriod = async (id, data) => {
     try {
         const response = await axios.put(`/periods/${id}`, data);
@@ -55,9 +45,6 @@ export const updatePeriod = async (id, data) => {
     }
 };
 
-/**
- * Eliminar un periodo
- */
 export const deletePeriod = async (id) => {
     try {
         const response = await axios.delete(`/periods/${id}`);
@@ -69,10 +56,6 @@ export const deletePeriod = async (id) => {
     }
 };
 
-/**
- * Obtener periodo activo
- * (para mostrar disponibilidad de horas)
- */
 export const getActivePeriod = async () => {
     try {
         const response = await axios.get("/periods/active");

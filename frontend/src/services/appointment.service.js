@@ -1,10 +1,5 @@
 import axios from "./root.service.js";
 
-/**
- * Obtener inscripciones (appointments)
- * - ciudadano: solo las suyas
- * - supervisor: las que debe revisar
- */
 export async function getAppointments() {
     try {
         const response = await axios.get("/appointments");
@@ -23,9 +18,6 @@ export async function getAppointments() {
     }
 }
 
-/**
- * Obtener una inscripción por ID
- */
 export async function getAppointmentById(id) {
     try {
         const response = await axios.get(`/appointments/${id}`);
@@ -43,10 +35,6 @@ export async function getAppointmentById(id) {
     }
 }
 
-/**
- * Crear una inscripción (tomar una hora)
- * ciudadano
- */
 export async function createAppointment(data) {
     try {
         const response = await axios.post("/appointments", data);
@@ -65,10 +53,6 @@ export async function createAppointment(data) {
     }
 }
 
-/**
- * Revisar inscripción (aprobar / rechazar)
- * supervisor
- */
 export async function updateAppointmentStatus(id, data) {
     try {
         const response = await axios.patch( `/appointments/status/${id}`, data);
@@ -87,10 +71,6 @@ export async function updateAppointmentStatus(id, data) {
     }
 }
 
-/**
- * Eliminar inscripción
- * (solo si tu backend lo permite, si no, puedes eliminar esta función)
- */
 export async function deleteAppointment(id) {
     try {
         const response = await axios.delete(`/appointments/${id}`);

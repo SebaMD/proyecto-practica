@@ -292,7 +292,7 @@ export function PetitionSchedule({
             Swal.fire({
                 icon: "warning",
                 title: "Periodo cerrado",
-                text: "Solo puedes tomar horas cuando el periodo est\u00E9 activo.",
+                text: "Solo puedes tomar horas cuando el periodo esta activo.",
             });
             return;
         }
@@ -390,7 +390,6 @@ export function PetitionSchedule({
 
             if (!sameDateTime) return false;
 
-            // Amarillo solo en la peticion que realmente tomo el ciudadano.
             return Number(appointment.petitionId) === Number(schedule.petitionId);
         });
     };

@@ -56,7 +56,7 @@ const Home = () => {
 
             const results = await Promise.all(tasks);
 
-            // 1) petitions (siempre primer resultado)
+            // petitions (siempre primer resultado)
             const petitionsResult = results[0];
             if (petitionsResult?.success) {
                 setPetitionCounter(petitionsResult.data?.length || 0);

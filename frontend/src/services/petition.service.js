@@ -1,10 +1,5 @@
 import axios from "./root.service.js";
 
-/**
- * Obtener todas las peticiones
- * - funcionario / supervisor: todas
- * - ciudadano: backend ya filtra las permitidas
- */
 export async function getPetitions() {
     try {
         const response = await axios.get("/petitions");
@@ -23,9 +18,6 @@ export async function getPetitions() {
     }
 }
 
-/**
- * Obtener una petición por ID
- */
 export async function getPetitionById(id) {
     try {
         const response = await axios.get(`/petitions/${id}`);
@@ -43,10 +35,6 @@ export async function getPetitionById(id) {
     }
 }
 
-/**
- * Crear una nueva petición
- * (funcionario)
- */
 export async function createPetition(data) {
     try {
         const response = await axios.post("/petitions", data);
@@ -65,9 +53,6 @@ export async function createPetition(data) {
     }
 }
 
-/**
- * Actualizar una petición
- */
 export async function updatePetition(id, data) {
     try {
         const response = await axios.patch(`/petitions/${id}`, data);
@@ -86,9 +71,6 @@ export async function updatePetition(id, data) {
     }
 }
 
-/**
- * Eliminar una petición
- */
 export async function deletePetition(id) {
     try {
         const response = await axios.delete(`/petitions/${id}`);

@@ -26,7 +26,7 @@ const Appointments = () => {
 
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
-    const supervisorView = searchParams.get("view"); // pending | reviews | null
+    const supervisorView = searchParams.get("view");
 
     const isCitizen = user.role === "ciudadano";
     const isSupervisor = user.role === "supervisor";

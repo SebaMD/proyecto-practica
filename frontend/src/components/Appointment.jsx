@@ -1,4 +1,3 @@
-// frontend/src/components/Appointments.jsx
 import { useAuth } from "@context/AuthContext";
 import {
     archiveReviewedAppointment,
@@ -267,7 +266,7 @@ export function Appointment({ appointment, onActionSuccess }) {
             </div>
 
             {appointment.rejectReason && (
-                <div className="p-2 rounded-md border border-red-300 bg-red-50 text-red-700 text-sm">
+                <div className="inline-flex w-fit p-2 rounded-md border border-red-300 bg-red-50 text-red-700 text-sm">
                     <strong>Motivo:</strong> {appointment.rejectReason}
                 </div>
             )}

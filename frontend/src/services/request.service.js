@@ -1,6 +1,5 @@
 import axios from "./root.service.js";
 
-// Obtener todas las solicitudes (según rol)
 export async function getRequests() {
     try {
         const response = await axios.get("/requests");
@@ -57,7 +56,6 @@ export async function getPickupAvailabilityByDate(date, citizenId = null) {
     }
 }
 
-// Obtener solicitud por ID
 export async function getRequestById(id) {
     try {
         const response = await axios.get(`/requests/${id}`);
@@ -75,7 +73,6 @@ export async function getRequestById(id) {
     }
 }
 
-// Crear solicitud (ciudadano)
 export async function createRequest(data) {
     try {
         const response = await axios.post("/requests", data);
@@ -113,7 +110,6 @@ export async function cancelOwnRequest(id) {
     }
 }
 
-// Revisar solicitud (funcionario / supervisor)
 export async function reviewRequest(id, data) {
     try {
         const response = await axios.patch(`/requests/review/${id}`, data);
