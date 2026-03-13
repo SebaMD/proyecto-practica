@@ -1,7 +1,7 @@
 import Joi from "joi";
 
 export const createAppointmentBodyValidation = Joi.object({
-    userId: Joi.number() //!ojo este no es tan necesario ya que lo ve por el id del token
+    userId: Joi.number()
         .required()
         .integer()
         .min(1)
@@ -16,10 +16,10 @@ export const createAppointmentBodyValidation = Joi.object({
         .integer()
         .min(1)
         .messages({
-            "any.required": "El ID de la peticion es obligatorio.",
-            "number.base": "El ID de la peticion debe ser un número.",
-            "number.integer": "El ID de la peticion debe ser un número entero.",
-            "number.min": "El ID de la peticion debe ser un entero positivo.",
+            "any.required": "El ID de la petición es obligatorio.",
+            "number.base": "El ID de la petición debe ser un número.",
+            "number.integer": "El ID de la petición debe ser un número entero.",
+            "number.min": "El ID de la petición debe ser un entero positivo.",
         }),
     petitionScheduleId: Joi.number()
         .required()

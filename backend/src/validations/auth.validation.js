@@ -23,7 +23,7 @@ export const userRegisterBodyValidation = Joi.object({
         .required()
         .messages({
             "string.base": "El nombre debe ser texto",
-            "string.empty": "El nombre no puede estar vacio",
+            "string.empty": "El nombre no puede estar vacío",
             "string.min": "El nombre debe tener al menos 3 caracteres",
             "string.max": "El nombre no puede exceder 75 caracteres",
             "string.pattern.base": "El nombre solo puede contener letras y espacios",
@@ -37,10 +37,10 @@ export const userRegisterBodyValidation = Joi.object({
         .custom((value) => normalizeEmail(value), "normalize email")
         .required()
         .messages({
-            "string.email": "Debe ser un email valido",
-            "string.pattern.base": "El email debe incluir @ y un dominio valido",
+            "string.email": "Debe ser un email válido",
+            "string.pattern.base": "El email debe incluir @ y un dominio válido",
             "string.max": "El email no puede exceder 254 caracteres",
-            "string.empty": "El email no puede estar vacio",
+            "string.empty": "El email no puede estar vacío",
             "any.required": "El email es obligatorio",
         }),
     rut: Joi.string()
@@ -49,14 +49,14 @@ export const userRegisterBodyValidation = Joi.object({
         .custom((value, helpers) => {
             const normalizedRut = normalizeRut(value);
             if (!isValidRut(normalizedRut)) {
-                return helpers.message("El RUT no es valido");
+                return helpers.message("El RUT no es válido");
             }
             return normalizedRut;
         }, "rut checksum")
         .required()
         .messages({
             "string.pattern.base": "El RUT debe ir sin puntos y con guion (ej: 12345678-9)",
-            "string.empty": "El RUT no puede estar vacio",
+            "string.empty": "El RUT no puede estar vacío",
             "any.required": "El RUT es obligatorio",
         }),
     password: Joi.string()
@@ -65,12 +65,12 @@ export const userRegisterBodyValidation = Joi.object({
         .pattern(PASSWORD_REGEX)
         .required()
         .messages({
-            "string.empty": "La contrasena no puede estar vacia",
-            "string.min": "La contrasena debe tener al menos 8 caracteres",
-            "string.max": "La contrasena no puede exceder 128 caracteres",
+            "string.empty": "La contraseña no puede estar vacía",
+            "string.min": "La contraseña debe tener al menos 8 caracteres",
+            "string.max": "La contraseña no puede exceder 128 caracteres",
             "string.pattern.base":
-                "La contrasena debe incluir una mayuscula, un numero y un caracter especial",
-            "any.required": "La contrasena es obligatoria",
+                "La contraseña debe incluir una mayúscula, un número y un carácter especial",
+            "any.required": "La contraseña es obligatoria",
         }),
 }).options({
     stripUnknown: true,
@@ -85,17 +85,17 @@ export const userLoginBodyValidation = Joi.object({
         .custom((value) => normalizeEmail(value), "normalize email")
         .required()
         .messages({
-            "string.email": "Debe ser un email valido",
-            "string.pattern.base": "El email debe incluir @ y un dominio valido",
+            "string.email": "Debe ser un email válido",
+            "string.pattern.base": "El email debe incluir @ y un dominio válido",
             "string.max": "El email no puede exceder 254 caracteres",
-            "string.empty": "El email no puede estar vacio",
+            "string.empty": "El email no puede estar vacío",
             "any.required": "El email es obligatorio",
         }),
     password: Joi.string()
         .required()
         .messages({
-            "string.empty": "La contrasena no puede estar vacia",
-            "any.required": "La contrasena es obligatoria",
+            "string.empty": "La contraseña no puede estar vacía",
+            "any.required": "La contraseña es obligatoria",
         }),
 }).options({
     stripUnknown: true,

@@ -1,5 +1,6 @@
 import { AppDataSource } from "../config/configDb.js";
 import { User } from "../entities/user.entity.js";
+import { sendAccountStatusEmail } from "./email.service.js";
 import bcrypt from "bcrypt";
 
 export async function getUsersService() {
@@ -34,6 +35,8 @@ export async function editUserService(id, data) {
         throw new Error("Usuario no encontrado");
     }
 
+    const previousAccountStatus = user.accountStatus;
+
     if (username) user.username = username;
     if (email) user.email = email;
     if (password) {
@@ -45,6 +48,15 @@ export async function editUserService(id, data) {
     if (accountStatus) user.accountStatus = accountStatus;
 
     const updatedUser = await userRepository.save(user);
+
+    if (accountStatus && previousAccountStatus !== accountStatus && (accountStatus === "aprobado" || accountStatus === "rechazado")) {
+        try {
+            await sendAccountStatusEmail(updatedUser, accountStatus);
+        } catch (error) {
+            console.error("[User Service] No se pudo enviar correo de estado:", error.message);
+        }
+    }
+
     delete updatedUser.password;
 
     return updatedUser;

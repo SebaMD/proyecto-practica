@@ -1,7 +1,6 @@
 import { AppDataSource } from "../config/configDb.js";
 import { Appointment } from "../entities/appointment.entity.js";
-import { Petition } from "../entities/petition.entity.js";
-import { IsNull, In } from "typeorm";
+import { In } from "typeorm";
 import { getIO } from "../socket.js";
 import { PetitionSchedule } from "../entities/petitionSchedule.entity.js";
 import { Request } from "../entities/request.entity.js";
@@ -29,6 +28,16 @@ function emitScheduleUpdated(schedule) {
 function timeToMinutes(time) {
     const [hour = 0, minute = 0] = String(time || "00:00").split(":").map(Number);
     return (hour * 60) + minute;
+}
+
+function getConsumedDateForRequest(request) {
+    if (!request) return null;
+    if (request.status === "aprobado" && request.pickupDate) return request.pickupDate;
+    return request.requestDate;
+}
+
+function normalizeDateOnly(value) {
+    return String(value || "").slice(0, 10);
 }
 
 async function getSameSlotSchedules(scheduleRepository, schedule) {
@@ -116,6 +125,7 @@ export async function createAppointmentService(data){
 
     const appointmentRepository = AppDataSource.getRepository(Appointment);
     const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
+    const requestRepository = AppDataSource.getRepository(Request);
 
     const schedule = await scheduleRepository.findOne({ where: { id: petitionScheduleId, petitionId } });
 
@@ -131,7 +141,24 @@ export async function createAppointmentService(data){
     });
 
     if (existingAppointment) {
-        throw new Error("Ya tienes una inscripcion para esta peticion");
+        throw new Error("Ya tienes una inscripción para esta petición");
+    }
+
+    const activeRequests = await requestRepository.find({
+        where: {
+            citizenId: userId,
+            status: In(["pendiente", "aprobado"]),
+        },
+        select: ["status", "requestDate", "pickupDate"],
+    });
+
+    const normalizedScheduleDate = normalizeDateOnly(schedule.date);
+    const hasRequestOnSameDate = activeRequests.some(
+        (request) => normalizeDateOnly(getConsumedDateForRequest(request)) === normalizedScheduleDate
+    );
+
+    if (hasRequestOnSameDate) {
+        throw new Error("Ya tienes una reserva activa para la fecha seleccionada");
     }
 
     const citizenAppointments = await appointmentRepository.find({
@@ -150,7 +177,7 @@ export async function createAppointmentService(data){
     const hasTimeConflict = citizenAppointments.some((appointment) => {
         const existingSchedule = appointment.schedule;
         if (!existingSchedule) return false;
-        if (existingSchedule.date !== schedule.date) return false;
+        if (normalizeDateOnly(existingSchedule.date) !== normalizedScheduleDate) return false;
 
         const existingStart = timeToMinutes(existingSchedule.startTime);
         const existingEnd = timeToMinutes(existingSchedule.endTime);
@@ -159,7 +186,17 @@ export async function createAppointmentService(data){
     });
 
     if (hasTimeConflict) {
-        throw new Error("Ya tienes una inscripcion en ese horario para la misma fecha");
+        throw new Error("Ya tienes una inscripción en ese horario para la misma fecha");
+    }
+
+    const hasAppointmentOnSameDate = citizenAppointments.some((appointment) => {
+        const existingSchedule = appointment.schedule;
+        if (!existingSchedule) return false;
+        return normalizeDateOnly(existingSchedule.date) === normalizedScheduleDate;
+    });
+
+    if (hasAppointmentOnSameDate) {
+        throw new Error("Ya tienes una reserva activa para la fecha seleccionada");
     }
 
     const occupiedCountForDate = await countActiveAppointmentsForDate(
@@ -169,14 +206,14 @@ export async function createAppointmentService(data){
     );
 
     if (occupiedCountForDate >= GLOBAL_DAILY_QUOTA) {
-        throw new Error(`No hay cupos disponibles para la fecha ${schedule.date}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`);
+        throw new Error(`No hay cupos disponibles para la fecha ${schedule.date}. Máximo diario: ${GLOBAL_DAILY_QUOTA}`);
     }
 
     const sameSlotSchedules = await getSameSlotSchedules(scheduleRepository, schedule);
     const { activeCount: occupiedSameSlot } = await getSameSlotOccupancy(appointmentRepository, sameSlotSchedules);
 
     if (occupiedSameSlot >= SLOT_CAPACITY) {
-        throw new Error(`Esa franja horaria ya alcanzo el maximo de ${SLOT_CAPACITY} cupos`);
+        throw new Error(`Esa franja horaria ya alcanzó el máximo de ${SLOT_CAPACITY} cupos`);
     }
 
     const newAppointment = appointmentRepository.create({ userId, petitionId, petitionScheduleId, status: "pendiente" });
@@ -229,7 +266,7 @@ export async function deleteAppointmentIdService(id){
 
     if(!appointment) return false;
 
-    if(appointment.status === "aprobado") throw new Error("No se puede eliminar una inscripcion aprobada");
+    if(appointment.status === "aprobado") throw new Error("No se puede eliminar una inscripción aprobada");
 
     if (appointment.status === "pendiente") {
         const scheduleRepository = AppDataSource.getRepository(PetitionSchedule);
@@ -262,7 +299,7 @@ export async function archiveReviewedAppointmentBySupervisorService(id, supervis
         throw new Error("Solo se pueden archivar inscripciones revisadas");
     }
     if (Number(appointment.supervisorId) !== Number(supervisorId)) {
-        throw new Error("La inscripcion no pertenece a las revisiones del supervisor");
+        throw new Error("La inscripción no pertenece a las revisiones del supervisor");
     }
     const scheduleDate = appointment?.schedule?.date;
     const scheduleEnd = String(appointment?.schedule?.endTime || "").slice(0, 5);
@@ -278,7 +315,7 @@ export async function archiveReviewedAppointmentBySupervisorService(id, supervis
         throw new Error("Solo puedes archivar cuando haya pasado la fecha y hora de atencion");
     }
 
-    appointment.archivedBySupervisor = true;
+    appointment.archived = true;
     return await appointmentRepository.save(appointment);
 }
 
@@ -313,15 +350,4 @@ export async function updateStatusService(id, data, supervisorId){
     }
 
     return savedAppointment;
-}
-
-export async function getPetitionsByPrerequisitesService() {
-    const petitionRepository = AppDataSource.getRepository(Petition);
-
-    return await petitionRepository.find({
-        where: [
-            { prerrequisites: IsNull() },
-            { prerrequisites: "" }
-        ]
-    });
 }

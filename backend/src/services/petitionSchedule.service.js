@@ -143,9 +143,9 @@ export async function createPetitionScheduleService(data) {
 
     const petition = await petitionRepository.findOne({ where: { id: petitionId } });
     if (isPastDate(date)) throw new Error("No se puede crear un horario en una fecha pasada");
-    if (isTodayDate(date)) throw new Error("No se puede crear un horario para hoy. Debe ser desde el dia siguiente");
-    if (isWeekendDate(date)) throw new Error("No se pueden crear horarios en fin de semana (sabado o domingo)");
-    if (!petition) throw new Error("La peticion no existe");
+    if (isTodayDate(date)) throw new Error("No se puede crear un horario para hoy. Debe ser desde el día siguiente");
+    if (isWeekendDate(date)) throw new Error("No se pueden crear horarios en fin de semana (sábado o domingo)");
+    if (!petition) throw new Error("La petición no existe");
 
     if (startTime < "08:00" || endTime > "13:00") {
         throw new Error("Las horas deben estar entre 08:00 y 13:00");
@@ -215,10 +215,10 @@ export async function updatePetitionScheduleService(id, data){
         throw new Error("No se puede mover un horario a una fecha pasada");
     }
     if (isTodayDate(nextDate)) {
-        throw new Error("No se puede mover un horario para hoy. Debe ser desde el dia siguiente");
+        throw new Error("No se puede mover un horario para hoy. Debe ser desde el día siguiente");
     }
     if (isWeekendDate(nextDate)) {
-        throw new Error("No se pueden asignar horarios en fin de semana (sabado o domingo)");
+        throw new Error("No se pueden asignar horarios en fin de semana (sábado o domingo)");
     }
 
     const startMinutes = timeToMinutes(nextStartTime);

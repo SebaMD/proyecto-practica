@@ -2,17 +2,17 @@ import Joi from "joi";
 
 export const createRequestBodyValidation = Joi.object({
     petitionId: Joi.number().required().integer().min(1).messages({
-        "any.required": "El ID de la peticion es obligatorio.",
-        "number.base": "El ID de la peticion debe ser un numero.",
-        "number.integer": "El ID de la peticion debe ser un numero entero.",
-        "number.min": "El ID de la peticion debe ser un entero positivo.",
+        "any.required": "El ID de la petición es obligatorio.",
+        "number.base": "El ID de la petición debe ser un número.",
+        "number.integer": "El ID de la petición debe ser un número entero.",
+        "number.min": "El ID de la petición debe ser un entero positivo.",
     }),
     description: Joi.string().trim().required().min(5).max(300).messages({
-        "any.required": "La descripcion es obligatoria.",
-        "string.base": "La descripcion debe ser de tipo String.",
-        "string.empty": "La descripcion no puede estar vacia.",
-        "string.min": "La descripcion debe contener al menos 5 caracteres.",
-        "string.max": "La descripcion puede contener hasta 300 caracteres.",
+        "any.required": "La descripción es obligatoria.",
+        "string.base": "La descripción debe ser de tipo String.",
+        "string.empty": "La descripción no puede estar vacía.",
+        "string.min": "La descripción debe contener al menos 5 caracteres.",
+        "string.max": "La descripción puede contener hasta 300 caracteres.",
     }),
     requestDate: Joi.string()
         .pattern(/^\d{4}-\d{2}-\d{2}$/)

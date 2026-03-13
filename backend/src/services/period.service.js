@@ -21,7 +21,7 @@ export async function getPeriodByIdService(id){
     const periodRepository = AppDataSource.getRepository(Period);
     const period = await periodRepository.findOneBy({ id: parseInt(id) });
 
-    if(!period) throw new Error("Period no encontrado");
+    if(!period) throw new Error("Periodo no encontrado");
 
     return period;
 }

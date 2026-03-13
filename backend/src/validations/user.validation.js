@@ -15,7 +15,7 @@ export const editUserBodyValidation = Joi.object({
         .custom((value) => normalizeUsername(value), "normalize username")
         .messages({
             "string.base": "El nombre debe ser texto",
-            "string.empty": "El nombre no puede estar vacio",
+            "string.empty": "El nombre no puede estar vacío ",
             "string.min": "El nombre debe tener al menos 3 caracteres",
             "string.max": "El nombre no puede exceder 75 caracteres",
             "string.pattern.base": "El nombre solo puede contener letras y espacios",
@@ -27,21 +27,21 @@ export const editUserBodyValidation = Joi.object({
         .pattern(EMAIL_REGEX)
         .custom((value) => normalizeEmail(value), "normalize email")
         .messages({
-            "string.email": "Debe ser un email valido",
-            "string.pattern.base": "El email debe incluir @ y un dominio valido",
+            "string.email": "Debe ser un email válido ",
+            "string.pattern.base": "El email debe incluir @ y un dominio válido ",
             "string.max": "El email no puede exceder 254 caracteres",
-            "string.empty": "El email no puede estar vacio",
+            "string.empty": "El email no puede estar vacío ",
         }),
     password: Joi.string()
         .min(8)
         .max(128)
         .pattern(PASSWORD_REGEX)
         .messages({
-            "string.min": "La contrasena debe tener al menos 8 caracteres",
-            "string.max": "La contrasena no puede exceder 128 caracteres",
+            "string.min": "La contraseña debe tener al menos 8 caracteres",
+            "string.max": "La contraseña no puede exceder 128 caracteres",
             "string.pattern.base":
-                "La contrasena debe incluir una mayuscula, un numero y un caracter especial",
-            "string.empty": "La contrasena no puede estar vacia",
+                "La contraseña debe incluir una mayúscula, un número y un carácter especial",
+            "string.empty": "La contraseña no puede estar vacía ",
         }),
     rut: Joi.string()
         .trim()
@@ -49,13 +49,13 @@ export const editUserBodyValidation = Joi.object({
         .custom((value, helpers) => {
             const normalizedRut = normalizeRut(value);
             if (!isValidRut(normalizedRut)) {
-                return helpers.message("El RUT no es valido");
+                return helpers.message("El RUT no es válido ");
             }
             return normalizedRut;
         }, "rut checksum")
         .messages({
-            "string.pattern.base": "El RUT debe ir sin puntos y con guion (ej: 12345678-9)",
-            "string.empty": "El RUT no puede estar vacio",
+            "string.pattern.base": "El RUT debe ir sin puntos y con gui�n (ej: 12345678-9)",
+            "string.empty": "El RUT no puede estar vacío ",
         }),
     role: Joi.string()
         .valid("administrador", "funcionario", "supervisor", "ciudadano")

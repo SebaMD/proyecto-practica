@@ -39,6 +39,10 @@ function getConsumedDateForRequest(request) {
     return request.requestDate;
 }
 
+function normalizeDateOnly(value) {
+    return String(value || "").slice(0, 10);
+}
+
 function getSlotKey(date, startTime, endTime) {
     return `${date}|${startTime}|${endTime}`;
 }
@@ -160,7 +164,48 @@ export async function createRequestService(data) {
     return await requestRepository.save(newRequest);
 }
 
-export async function countGlobalUsedForDateService(date) {
+export async function hasCitizenReservationOnDateService(citizenId, date, excludedRequestId = null) {
+    if (!citizenId || !date) return false;
+    const normalizedDate = normalizeDateOnly(date);
+
+    const appointmentRepository = AppDataSource.getRepository(Appointment);
+    const requestRepository = AppDataSource.getRepository(Request);
+
+    const activeAppointments = await appointmentRepository.find({
+        where: {
+            userId: citizenId,
+            status: In(["pendiente", "aprobado"]),
+        },
+        relations: {
+            schedule: true,
+        },
+    });
+
+    const hasAppointmentOnDate = activeAppointments.some(
+        (appointment) => normalizeDateOnly(appointment?.schedule?.date) === normalizedDate
+    );
+
+    if (hasAppointmentOnDate) {
+        return true;
+    }
+
+    const activeRequests = await requestRepository.find({
+        where: {
+            citizenId,
+            status: In(["pendiente", "aprobado"]),
+        },
+        select: ["id", "status", "requestDate", "pickupDate"],
+    });
+
+    return activeRequests.some((request) => {
+        if (excludedRequestId && Number(request.id) === Number(excludedRequestId)) {
+            return false;
+        }
+        return normalizeDateOnly(getConsumedDateForRequest(request)) === normalizedDate;
+    });
+}
+
+export async function countGlobalUsedForDateService(date, excludedRequestId = null) {
     if (!date) return 0;
 
     const appointmentRepository = AppDataSource.getRepository(Appointment);
@@ -182,12 +227,15 @@ export async function countGlobalUsedForDateService(date) {
         where: {
             status: In(["pendiente", "aprobado"]),
         },
-        select: ["status", "requestDate", "pickupDate"],
+        select: ["id", "status", "requestDate", "pickupDate"],
     });
 
-    const activeRequestsUsed = activeRequests.filter(
-        (request) => getConsumedDateForRequest(request) === date
-    ).length;
+    const activeRequestsUsed = activeRequests.filter((request) => {
+        if (excludedRequestId && Number(request.id) === Number(excludedRequestId)) {
+            return false;
+        }
+        return getConsumedDateForRequest(request) === date;
+    }).length;
 
     return appointmentsUsed + activeRequestsUsed;
 }
@@ -272,6 +320,11 @@ export async function reviewRequestService(id, data) {
             throw new Error("La fecha de retiro debe coincidir con la fecha solicitada por el ciudadano");
         }
 
+        const hasReservationOnDate = await hasCitizenReservationOnDateService(request.citizenId, pickupDate, request.id);
+        if (hasReservationOnDate) {
+            throw new Error("El ciudadano ya tiene una reserva activa para la fecha seleccionada");
+        }
+
         const existingSchedule = await scheduleRepository.findOne({
             where: {
                 petitionId: request.petitionId,
@@ -281,12 +334,12 @@ export async function reviewRequestService(id, data) {
             },
         });
         if (!existingSchedule) {
-            throw new Error("La hora seleccionada no existe en la peticion para esa fecha");
+            throw new Error("La hora seleccionada no existe en la petición para esa fecha");
         }
 
-        const globalUsed = await countGlobalUsedForDateService(pickupDate);
+        const globalUsed = await countGlobalUsedForDateService(pickupDate, request.id);
         if (globalUsed >= GLOBAL_DAILY_QUOTA) {
-            throw new Error(`No hay cupos disponibles para la fecha ${pickupDate}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`);
+            throw new Error(`No hay cupos disponibles para la fecha ${pickupDate}. Máximo diario: ${GLOBAL_DAILY_QUOTA}`);
         }
 
         const activeAppointments = await appointmentRepository.find({
@@ -309,7 +362,7 @@ export async function reviewRequestService(id, data) {
         }).length;
 
         if (occupiedCount >= SLOT_CAPACITY) {
-            throw new Error("Ese horario ya fue tomado por una inscripcion");
+            throw new Error("Ese horario ya fue tomado por una inscripción");
         }
 
         const sameCitizenAppointment = activeAppointments.some((appointment) => {
@@ -391,7 +444,7 @@ export async function archiveReviewedRequestByFuncionarioService(id, reviewerId)
         const pickupDate = request.pickupDate;
         const pickupTime = request.pickupTime;
         if (!pickupDate || !pickupTime) {
-            throw new Error("No se pudo validar la hora de atencion para archivar");
+            throw new Error("No se pudo validar la hora de atención para archivar");
         }
 
         const pickupEndTime = add30Minutes(pickupTime);
@@ -400,11 +453,11 @@ export async function archiveReviewedRequestByFuncionarioService(id, reviewerId)
         const endDateTime = new Date(year, month - 1, day, hour, minute, 0, 0);
 
         if (new Date() < endDateTime) {
-            throw new Error("Solo puedes archivar cuando haya pasado la fecha y hora de atencion");
+            throw new Error("Solo puedes archivar cuando haya pasado la fecha y hora de atención");
         }
     }
 
-    request.archivedByFuncionario = true;
+    request.archived = true;
     const savedRequest = await requestRepository.save(request);
     const [requestWithCitizen] = await attachCitizenData([savedRequest]);
     return requestWithCitizen;

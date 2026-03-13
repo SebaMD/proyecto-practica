@@ -56,7 +56,7 @@ export async function deletePetitionService(id) {
     const result = await petitionRepository.delete(petition.id);
 
     if (result.affected === 0) {
-        throw new Error("No se pudo eliminar la peticion");
+        throw new Error("No se pudo eliminar la petición");
     }
 
     return { message: "Peticion eliminada exitosamente" };

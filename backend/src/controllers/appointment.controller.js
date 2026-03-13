@@ -14,7 +14,6 @@ import {
     deleteAppointmentIdService, 
     updateStatusService, 
     hasAppointmentToPetitionService, 
-    getPetitionsByPrerequisitesService,
     archiveReviewedAppointmentBySupervisorService,
 } from "../services/appointment.service.js";
 import {
@@ -38,16 +37,16 @@ export async function createAppointment(req, res){
         if (!authHeader) return handleErrorClient(res, 401, "No autorizado", "No se proporcionó token");
 
         const token = authHeader.split(" ")[1];
-        const payload = jwt.decode/*o "verify"?*/(token, process.env.JWT_SECRET);
+        const payload = jwt.decode(token, process.env.JWT_SECRET);
 
-        const data = {...req.body, userId: payload.id}; //!ojo el userId no es tan necesario ya que lo ve por el id del token
+        const data = {...req.body, userId: payload.id}; 
         
         const { error } = createAppointmentBodyValidation.validate(data);
 
-        if(error) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+        if(error) return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
 
         const hasAppointment = await hasAppointmentToPetitionService(payload.id, data.petitionId);
-        if(hasAppointment) return handleErrorClient(res, 409, "Ya existe una solicitud a la peticion indicada");
+        if(hasAppointment) return handleErrorClient(res, 409, "Ya existe una solicitud a la petición indicada");
 
         const newAppointment = await createAppointmentService(data);
 
@@ -83,12 +82,12 @@ export async function getAppointment(req, res){
                     appointment.status === "pendiente" ||
                     (
                         appointment.supervisorId === payload.id &&
-                        !appointment.archivedBySupervisor
+                        !appointment.archived
                     )
             );
         }
 
-        if(appointments.length < 1) return handleSuccess(res, 404, "No se encontro ninguna inscripcion");
+        if(appointments.length < 1) return handleSuccess(res, 404, "No se encontró ninguna inscripción");
 
         handleSuccess(res, 200, "Inscripciones obtenidas exitosamente", appointments);
     } catch (error) {
@@ -106,19 +105,19 @@ export async function archiveReviewedAppointmentBySupervisor(req, res) {
         const payload = jwt.decode(token, process.env.JWT_SECRET);
 
         const archivedAppointment = await archiveReviewedAppointmentBySupervisorService(id, payload.id);
-        handleSuccess(res, 200, "Inscripcion archivada exitosamente", archivedAppointment);
+        handleSuccess(res, 200, "Inscripción archivada exitosamente", archivedAppointment);
     } catch (error) {
         if (
-            error.message === "Inscripcion no encontrada" ||
+            error.message === "Inscripción no encontrada" ||
             error.message === "Solo se pueden archivar inscripciones revisadas" ||
-            error.message === "La inscripcion no pertenece a las revisiones del supervisor" ||
-            error.message === "Solo puedes archivar cuando haya pasado la fecha y hora de atencion" ||
-            error.message === "No se pudo validar la hora de atencion para archivar"
+            error.message === "La inscripción no pertenece a las revisiones del supervisor" ||
+            error.message === "Solo puedes archivar cuando haya pasado la fecha y hora de atención" ||
+            error.message === "No se pudo validar la hora de atención para archivar"
         ) {
             return handleErrorClient(res, 409, error.message);
         }
 
-        handleErrorServer(res, 500, "Error al archivar la inscripcion", error.message);
+        handleErrorServer(res, 500, "Error al archivar la inscripción", error.message);
     }
 }
 
@@ -135,7 +134,7 @@ export async function getAppointmentId(req, res){
             return handleErrorClient(res, 403, "La solicitud no corresponde al ciudadano");
         }
 
-        handleSuccess(res, 200, "Inscripcion encontrada", appointment);
+        handleSuccess(res, 200, "Inscripción encontrada", appointment);
     } catch (error) {
         handleErrorServer(res, 500, "Error al obtener la solicitud", error.message);
     }
@@ -145,20 +144,20 @@ export async function deleteAppointmentId(req, res){
     try {
         const { id } = req.params;
 
-        // Verificar periodo al eliminar
-        // Si el periodo cerró, el ciudadano no puede borrar su inscripción
+        // Verificar períodoal eliminar
+        // Si el período cerro, el ciudadano no puede borrar su inscripción
         const isPeriodActive = await checkActivePeriodService();
         if (!isPeriodActive) {
-            return handleErrorClient(res, 403, "El periodo ha cerrado. No puedes anular inscripciones.");
+            return handleErrorClient(res, 403, "El períodoha cerrado. No puedes anular inscripciones.");
         }
 
         const appointment = await deleteAppointmentIdService(id);
 
         if(!appointment) return handleErrorClient(res, 404, "Inscripción no encontrada");
 
-        handleSuccess(res, 200, "Inscripcion eliminada exitosamente", appointment); 
+        handleSuccess(res, 200, "Inscripción eliminada exitosamente", appointment); 
     } catch (error) {
-        handleErrorServer(res, 500, "Error al eliminar la inscripcion", error.message);
+        handleErrorServer(res, 500, "Error al eliminar la inscripción", error.message);
     }
 }
 
@@ -176,18 +175,18 @@ export async function updateStatus(req, res){
 
         const appointment = await getAppointmentIdService(id);
         if(appointment.status !== "pendiente"){
-            return handleErrorClient(res, 400, "La inscripcion ya fue revisada");
+            return handleErrorClient(res, 400, "La inscripción ya fue revisada");
         }
 
         const { error } = updateStatusValidation.validate(data);
-        if ( error ) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+        if ( error ) return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
 
         if (data.status === "aprobado") {
             const allAppointments = await getAppointmentService();
             const currentAppointment = allAppointments.find((a) => a.id === Number(id));
 
             if (!currentAppointment?.schedule?.date) {
-                return handleErrorClient(res, 400, "No se pudo validar la fecha de la inscripcion");
+                return handleErrorClient(res, 400, "No se pudo validar la fecha de la inscripción");
             }
 
             const approvedCountSameDate = allAppointments.filter(
@@ -209,25 +208,7 @@ export async function updateStatus(req, res){
         const updateStatus = await updateStatusService(id, data, payload.id);
         handleSuccess(res, 200, "Solicitud revisada exitosamente", updateStatus);
     } catch (error) {
-        handleErrorServer(res, 500, "Error al revisar la inscripcion", error.message);
-    }
-}
-
-export async function getPetitionsByPrerequisites(req, res){
-    try {
-        const authHeader = req.headers["authorization"];
-        const token = authHeader.split(" ")[1];
-        const payload = jwt.decode(token, process.env.JWT_SECRET);
-
-        let petitions = await getPetitionsByPrerequisitesService();
-
-        if (petitions.length === 0) {
-            return handleErrorClient(res, 404, "No se encontraron peticiones sin requisitos previos.");
-        }
-
-        return handleSuccess(res, 200, "Peticiones sin requisitos obtenidos exitosamente", petitions);
-    } catch (error) {
-        handleErrorServer(res, 500, "Error al obtener las peticiones", error.message);
+        handleErrorServer(res, 500, "Error al revisar la inscripción", error.message);
     }
 }
 
@@ -237,7 +218,7 @@ export async function getAppointmentsByPetition(req, res){
 
         const petitionId = parseInt(id);
         if (isNaN(petitionId)) {
-            return handleErrorClient(res, 400, "ID de la peticion inválido");
+            return handleErrorClient(res, 400, "ID de la petición inválido");
         }
 
         let appointments = await getAppointmentService();
@@ -250,7 +231,7 @@ export async function getAppointmentsByPetition(req, res){
             res,
             200,
             appointments.length === 0
-            ? "No hay inscripciones para esta peticion"
+            ? "No hay inscripciones para esta petición"
             : "Inscripciones encontradas",
             appointments
         );
@@ -292,12 +273,12 @@ export async function exportAppointmentsReport(req, res) {
         await workbook.xlsx.write(res);
         res.end();
     } catch (error) {
-        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
             return handleErrorClient(res, 403, error.message);
         }
         if (
-            error.message?.includes("No existe un periodo cerrado para exportar") ||
-            error.message?.includes("La fecha no pertenece al ultimo periodo cerrado") ||
+            error.message?.includes("No existe un período cerrado para exportar") ||
+            error.message?.includes("La fecha no pertenece al último período cerrado") ||
             error.message?.includes("No hay citas aprobadas para esa fecha") ||
             error.message?.includes("No hay citas revisadas para esa fecha")
         ) {
@@ -321,15 +302,15 @@ export async function getSupervisorReportDates(req, res) {
             200,
             dates.length > 0
                 ? "Fechas de reporte obtenidas exitosamente"
-                : "No hay fechas disponibles para exportar en el ultimo periodo cerrado",
+                : "No hay fechas disponibles para exportar en el último período cerrado",
             dates
         );
     } catch (error) {
-        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
-            return handleSuccess(res, 200, "Exportacion bloqueada mientras el periodo este activo", []);
+        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
+            return handleSuccess(res, 200, "Exportación bloqueada mientras el período esté activo", []);
         }
-        if (error.message?.includes("No existe un periodo cerrado para exportar")) {
-            return handleSuccess(res, 200, "No hay periodos cerrados para exportar", []);
+        if (error.message?.includes("No existe un período cerrado para exportar")) {
+            return handleSuccess(res, 200, "No hay períodos cerrados para exportar", []);
         }
         handleErrorServer(res, 500, "Error al obtener fechas de reporte", error.message);
     }

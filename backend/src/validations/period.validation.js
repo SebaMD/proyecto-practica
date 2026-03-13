@@ -1,5 +1,9 @@
 import Joi from "joi";
 
+// Cambio pendiente para después de las pruebas:
+// para exigir una duración mínima de 2 días.
+// const PERIOD_MIN_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
+
 export const periodBodyValidation = Joi.object({   
     name: Joi.string()
         .min(5)
@@ -22,6 +26,14 @@ export const periodBodyValidation = Joi.object({
     closingDate: Joi.date()
         .iso()
         .greater(Joi.ref("startDate")) 
+        // .custom((value, helpers) => {
+        //     const startDate = new Date(helpers.state.ancestors[0].startDate);
+        //     const closingDate = new Date(value);
+        //     if ((closingDate.getTime() - startDate.getTime()) < PERIOD_MIN_DURATION_MS) {
+        //         return helpers.message("El período debe tener una duración mínima de 2 días.");
+        //     }
+        //     return value;
+        // }, "minimum period duration")
         .required()
         .messages({
             "date.greater": "La fecha de cierre debe ser posterior a la fecha de inicio.",

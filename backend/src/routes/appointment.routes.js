@@ -8,7 +8,6 @@ import {
     getAppointmentId,
     deleteAppointmentId,
     updateStatus,
-    getPetitionsByPrerequisites,
     exportAppointmentsReport,
     getSupervisorReportDates,
     archiveReviewedAppointmentBySupervisor,
@@ -21,7 +20,6 @@ router.use(authenticateJwt);
 router.get("/", verifyRoles(["supervisor", "ciudadano"]), getAppointment); 
 router.get("/export", verifyRoles(["supervisor"]), exportAppointmentsReport);
 router.get("/export/dates", verifyRoles(["supervisor"]), getSupervisorReportDates);
-router.get("/filter", verifyRoles(["ciudadano", "supervisor"]), getPetitionsByPrerequisites);
 
 router.get("/:id", verifyRoles(["ciudadano"]), getAppointmentId);
 

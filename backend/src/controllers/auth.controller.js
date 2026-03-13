@@ -18,11 +18,11 @@ export async function login(req, res){
         const { error } = userLoginBodyValidation.validate(body);
 
         if(error){
-            return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+            return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
         }
 
         const data = await loginService(body);
-        handleSuccess(res, 200, "Inicio de sesion exitoso", data);
+        handleSuccess(res, 200, "Inicio de sesión exitoso", data);
     }catch(error){
         return handleErrorClient(res, 401, error.message);
     }
@@ -34,13 +34,13 @@ export async function register(req, res){
         const { error, value } = userRegisterBodyValidation.validate(body);
 
         if(error){
-            return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+            return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
         }
 
         const newUser = await registerService(value);
         delete newUser.password;
 
-        handleSuccess(res, 201, "Solicitud de registro enviada. Cuenta pendiente de aprobacion", newUser);
+        handleSuccess(res, 201, "Solicitud de registro enviada. Cuenta pendiente de aprobación", newUser);
     }catch(error){
         if(error.code === "23505"){
             if(error.detail?.includes("email")){

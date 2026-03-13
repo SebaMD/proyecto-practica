@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 
 const _filename = fileURLToPath(import.meta.url);
 const _dirname = path.dirname(_filename);
-const envFilePath = path.resolve(_dirname, ".env");
+const envFilePath = path.resolve(_dirname, "../../.env");
 
 dotenv.config({ path: envFilePath })
 
@@ -20,3 +20,6 @@ export const DATABASE = process.env.DATABASE;
 
 export const COOKIE_KEY = process.env.COOKIE_KEY;
 export const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+
+export const EMAIL_USER = process.env.EMAIL_USER;
+export const EMAIL_PASS = process.env.EMAIL_PASS;

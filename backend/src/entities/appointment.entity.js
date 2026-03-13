@@ -42,7 +42,7 @@ export const Appointment = new EntitySchema({
             nullable: true,
             default: null,
         },
-        archivedBySupervisor: {
+        archived: {
             type: "boolean",
             nullable: false,
             default: false,

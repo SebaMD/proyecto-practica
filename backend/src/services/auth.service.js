@@ -16,15 +16,15 @@ export async function loginService(data) {
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-        throw new Error("Usuario o contrasena incorrectos");
+        throw new Error("Email o contraseña incorrectos");
     }
 
     if (user.accountStatus === "pendiente") {
-        throw new Error("Tu cuenta esta pendiente de aprobacion por un administrador");
+        throw new Error("Tu cuenta está pendiente de aprobación por un administrador");
     }
 
     if (user.accountStatus === "rechazado") {
-        throw new Error("Tu cuenta fue rechazada. Contacta a administracion");
+        throw new Error("Tu cuenta fue rechazada. Contacta a administración");
     }
 
     const token = jwt.sign(

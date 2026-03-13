@@ -14,6 +14,7 @@ import {
     getRequestDateUsageService,
     getPickupAvailabilityByDateService,
     archiveReviewedRequestByFuncionarioService,
+    hasCitizenReservationOnDateService,
 } from "../services/request.service.js";
 import {
     createRequestBodyValidation,
@@ -46,13 +47,13 @@ export async function createRequest(req, res) {
             return handleErrorClient(
                 res,
                 403,
-                "El proceso de renovacion no esta disponible para los ciudadanos en este momento."
+                "El proceso de renovación no está disponible para los ciudadanos en este momento."
             );
         }
 
         const { body } = req;
         const { error } = createRequestBodyValidation.validate(body);
-        if (error) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+        if (error) return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
 
         const authHeader = req.headers["authorization"];
         const token = authHeader.split(" ")[1];
@@ -61,14 +62,18 @@ export async function createRequest(req, res) {
 
         const hasRequest = await hasRequestOfPetitionService(payload.id, body.petitionId);
         if (hasRequest) {
-            return handleErrorClient(res, 409, "Ya existe una solicitud activa o aprobada para la peticion indicada");
+            return handleErrorClient(res, 409, "Ya existe una solicitud activa o aprobada para la petición indicada");
+        }
+        const hasCitizenReservationOnSameDate = await hasCitizenReservationOnDateService(payload.id, body.requestDate);
+        if (hasCitizenReservationOnSameDate) {
+            return handleErrorClient(res, 409, "Ya tienes una reserva activa para la fecha seleccionada");
         }
         const globalUsed = await countGlobalUsedForDateService(body.requestDate);
         if (globalUsed >= GLOBAL_DAILY_QUOTA) {
             return handleErrorClient(
                 res,
                 409,
-                `No hay cupos disponibles para la fecha ${body.requestDate}. Maximo diario: ${GLOBAL_DAILY_QUOTA}`
+                `No hay cupos disponibles para la fecha ${body.requestDate}. Máximo diario: ${GLOBAL_DAILY_QUOTA}`
             );
         }
 
@@ -76,6 +81,14 @@ export async function createRequest(req, res) {
         await emitRequestUsageUpdated();
         handleSuccess(res, 201, "Solicitud creada exitosamente", newRequest);
     } catch (error) {
+        if (
+            error.message?.includes("Ya tienes una reserva activa") ||
+            error.message?.includes("Ya existe una solicitud activa") ||
+            error.message?.includes("No hay cupos disponibles")
+        ) {
+            return handleErrorClient(res, 409, error.message);
+        }
+
         handleErrorServer(res, 500, "Error al crear la solicitud", error.message);
     }
 }
@@ -99,7 +112,7 @@ export async function getRequests(req, res) {
             });
         } else if (payload.role === "funcionario") {
             requests = requests.filter(
-                (request) => request.status === "pendiente" || !request.archivedByFuncionario
+                (request) => request.status === "pendiente" || !request.archived
             );
         }
 
@@ -168,7 +181,7 @@ export async function reviewRequest(req, res) {
         }
 
         const { error } = reviewRequestValidation.validate(body);
-        if (error) return handleErrorClient(res, 400, "Parametros invalidos", error.message);
+        if (error) return handleErrorClient(res, 400, "Parámetros inválidos", error.message);
 
         const authHeader = req.headers["authorization"];
         const token = authHeader.split(" ")[1];
@@ -263,12 +276,12 @@ export async function exportRequestsReport(req, res) {
         await workbook.xlsx.write(res);
         res.end();
     } catch (error) {
-        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
+        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
             return handleErrorClient(res, 403, error.message);
         }
         if (
-            error.message?.includes("No existe un periodo cerrado para exportar") ||
-            error.message?.includes("La fecha no pertenece al ultimo periodo cerrado") ||
+            error.message?.includes("No existe un período cerrado para exportar") ||
+            error.message?.includes("La fecha no pertenece al último período cerrado") ||
             error.message?.includes("No hay solicitudes para esa fecha")
         ) {
             return handleErrorClient(res, 404, error.message);
@@ -286,15 +299,15 @@ export async function getRequestReportDates(req, res) {
             200,
             dates.length > 0
                 ? "Fechas de solicitudes obtenidas exitosamente"
-                : "No hay fechas disponibles para exportar en el ultimo periodo cerrado",
+                : "No hay fechas disponibles para exportar en el último período cerrado",
             dates
         );
     } catch (error) {
-        if (error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado")) {
-            return handleSuccess(res, 200, "Exportacion bloqueada mientras el periodo este activo", []);
+        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
+            return handleSuccess(res, 200, "Exportación bloqueada mientras el período esté activo", []);
         }
-        if (error.message?.includes("No existe un periodo cerrado para exportar")) {
-            return handleSuccess(res, 200, "No hay periodos cerrados para exportar", []);
+        if (error.message?.includes("No existe un período cerrado para exportar")) {
+            return handleSuccess(res, 200, "No hay períodos cerrados para exportar", []);
         }
         handleErrorServer(res, 500, "Error al obtener fechas de solicitudes", error.message);
     }

@@ -62,7 +62,7 @@ export const Request = new EntitySchema({
             nullable: true,
             default: null,
         },
-        archivedByFuncionario: {
+        archived: {
             type: "boolean",
             nullable: false,
             default: false,
