@@ -180,8 +180,8 @@ export function Navbar() {
                         type="button"
                         onClick={() => setIsSettingsOpen((prev) => !prev)}
                         className="flex items-center justify-center rounded-md px-3 py-2 text-blue-100 hover:bg-blue-700/50 hover:text-white"
-                        title="Opciones de sesion"
-                        aria-label="Opciones de sesion"
+                        title="Opciones de sesión"
+                        aria-label="Opciones de sesión"
                     >
                         <Settings
                             className={`h-4 w-4 transition-transform duration-200 ${
@@ -206,7 +206,7 @@ export function Navbar() {
                                 onClick={() => setIsSettingsOpen(false)}
                                 className="block rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50"
                             >
-                                Cerrar sesion
+                                Cerrar sesión
                             </NavLink>
                         </div>
                     )}

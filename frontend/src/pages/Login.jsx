@@ -49,6 +49,7 @@ const Login = () => {
     const navigate = useNavigate();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const { setUser } = useAuth();
@@ -71,7 +72,7 @@ const Login = () => {
             }
         } catch (err) {
             console.error("Login error:", err);
-            errorData("Error inesperado al iniciar sesion");
+            errorData("Error inesperado al iniciar sesión");
         }
 
         setLoading(false);
@@ -88,18 +89,46 @@ const Login = () => {
                     <input id="registerEmail" type="email" class="swal2-input m-0" placeholder="correo@ejemplo.com" />
                     <label class="text-sm font-medium mt-1">RUT</label>
                     <input id="registerRut" class="swal2-input m-0" placeholder="12345678-9" />
-                    <label class="text-sm font-medium mt-1">Contrasena</label>
-                    <input id="registerPassword" type="password" class="swal2-input m-0" placeholder="Minimo 8, una mayuscula, un numero y un simbolo" />
+                    <label class="text-sm font-medium mt-1">Contraseña</label>
+                    <div style="display:flex;align-items:center;width:100%;margin-top:4px;border:1px solid #d1d5db;border-radius:8px;background:#fff;padding:0 12px;">
+                        <input id="registerPassword" type="password" placeholder="Mínimo 8, una mayúscula, un número y un símbolo" style="width:100%;border:0;outline:none;background:transparent;padding:12px 0;box-shadow:none;" />
+                        <button id="toggleRegisterPassword" type="button" style="border:0;background:transparent;padding:0;margin-left:12px;color:#6b7280;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;">Ver</button>
+                    </div>
+                    <label class="text-sm font-medium mt-1">Confirmar contraseña</label>
+                    <div style="display:flex;align-items:center;width:100%;margin-top:4px;border:1px solid #d1d5db;border-radius:8px;background:#fff;padding:0 12px;">
+                        <input id="registerConfirmPassword" type="password" placeholder="Repite tu contraseña" style="width:100%;border:0;outline:none;background:transparent;padding:12px 0;box-shadow:none;" />
+                        <button id="toggleRegisterConfirmPassword" type="button" style="border:0;background:transparent;padding:0;margin-left:12px;color:#6b7280;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;">Ver</button>
+                    </div>
                 </div>
             `,
             showCancelButton: true,
             confirmButtonText: "Enviar solicitud",
             cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => {
+                const bindToggle = (inputId, buttonId) => {
+                    const input = document.getElementById(inputId);
+                    const button = document.getElementById(buttonId);
+                    if (!input || !button) return;
+
+                    button.textContent = "Ver";
+                    button.addEventListener("click", () => {
+                        const isPassword = input.type === "password";
+                        input.type = isPassword ? "text" : "password";
+                        button.textContent = isPassword ? "Ocultar" : "Ver";
+                    });
+                };
+
+                bindToggle("registerPassword", "toggleRegisterPassword");
+                bindToggle("registerConfirmPassword", "toggleRegisterConfirmPassword");
+            },
             preConfirm: () => {
                 const username = normalizeName(document.getElementById("registerUsername")?.value);
                 const emailValue = normalizeEmail(document.getElementById("registerEmail")?.value);
                 const rut = normalizeRut(document.getElementById("registerRut")?.value);
                 const passwordValue = document.getElementById("registerPassword")?.value?.trim();
+                const confirmPasswordValue = document.getElementById("registerConfirmPassword")?.value?.trim();
 
                 if (!username || username.length < 3) {
                     Swal.showValidationMessage("El nombre debe tener al menos 3 caracteres");
@@ -110,7 +139,7 @@ const Login = () => {
                     return false;
                 }
                 if (!emailValue || !EMAIL_REGEX.test(emailValue)) {
-                    Swal.showValidationMessage("El email debe tener formato valido (ej: correo@dominio.com)");
+                    Swal.showValidationMessage("El email debe tener formato válido (ej: correo@dominio.com)");
                     return false;
                 }
                 if (!RUT_REGEX.test(rut || "")) {
@@ -118,11 +147,19 @@ const Login = () => {
                     return false;
                 }
                 if (!isValidRut(rut)) {
-                    Swal.showValidationMessage("El RUT no es valido");
+                    Swal.showValidationMessage("El RUT no es válido");
                     return false;
                 }
                 if (!passwordValue || !PASSWORD_REGEX.test(passwordValue)) {
-                    Swal.showValidationMessage("La contrasena debe tener minimo 8, una mayuscula, un numero y un caracter especial");
+                    Swal.showValidationMessage("La contraseña debe tener mínimo 8, una mayúscula, un número y un carácter especial");
+                    return false;
+                }
+                if (!confirmPasswordValue) {
+                    Swal.showValidationMessage("Debes confirmar la contraseña");
+                    return false;
+                }
+                if (passwordValue !== confirmPasswordValue) {
+                    Swal.showValidationMessage("Las contraseñas no coinciden");
                     return false;
                 }
 
@@ -146,7 +183,7 @@ const Login = () => {
         await Swal.fire({
             icon: "success",
             title: "Solicitud enviada",
-            text: "Tu cuenta quedo pendiente de aprobacion por un administrador.",
+            text: "Tu cuenta quedó pendiente de aprobación por un administrador. Se te informará por correo si fue aprobada o rechazada.",
             confirmButtonText: "Entendido",
         });
     };
@@ -156,7 +193,7 @@ const Login = () => {
             <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 w-full max-w-md transform transition-all hover:scale-105 border-t-4 border-red-500">
                 <form className="space-y-6" onSubmit={handleSubmit}>
                     <h1 className="text-4xl font-bold text-center bg-clip-text text-transparent bg-linear-to-r from-blue-700 via-emerald-600 to-red-600 mb-8">
-                        Iniciar sesion
+                        Iniciar sesión
                     </h1>
 
                     {errorEmail && (
@@ -184,16 +221,25 @@ const Login = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label htmlFor="password" className="block text-sm font-semibold text-gray-700">Contrasena</label>
-                        <input
-                            type="password"
-                            id="password"
-                            value={password}
-                            onChange={(e) => { setPassword(e.target.value); handleInputChange(); }}
-                            placeholder="**********"
-                            required
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all duration-300"
-                        />
+                        <label htmlFor="password" className="block text-sm font-semibold text-gray-700">Contraseña</label>
+                        <div className="flex items-center rounded-lg border-2 border-gray-200 bg-white px-4 py-3 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-200 transition-all duration-300">
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                id="password"
+                                value={password}
+                                onChange={(e) => { setPassword(e.target.value); handleInputChange(); }}
+                                placeholder="**********"
+                                required
+                                className="w-full bg-transparent outline-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword((prev) => !prev)}
+                                className="ml-3 text-sm font-medium text-gray-500 hover:text-gray-700"
+                            >
+                                {showPassword ? "Ocultar" : "Ver"}
+                            </button>
+                        </div>
                     </div>
 
                     <button
@@ -201,7 +247,7 @@ const Login = () => {
                         disabled={loading}
                         className="w-full bg-linear-to-r from-blue-600 via-emerald-500 to-red-500 hover:from-blue-700 hover:via-emerald-600 hover:to-red-600 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-yellow-300 disabled:opacity-50"
                     >
-                        {loading ? "Cargando..." : "Iniciar sesion"}
+                        {loading ? "Cargando..." : "Iniciar sesión"}
                     </button>
 
                     <button
@@ -218,3 +264,5 @@ const Login = () => {
 };
 
 export default Login;
+
+

@@ -87,11 +87,11 @@ const Users = () => {
                 await fetchUsers();
             } else {
                 if (registerResponse.message.includes("RUT")) {
-                    showErrorAlert("Error", "El RUT ya estÃ¡ registrado");
+                    showErrorAlert("Error", "El RUT ya esta registrado");
                 }
 
                 if (registerResponse.message.includes("email")) {
-                    showErrorAlert("Error", "El email ya estÃ¡ registrado");
+                    showErrorAlert("Error", "El email ya esta registrado");
                 }
             }
         } catch (error) {
@@ -121,11 +121,11 @@ const Users = () => {
                 await fetchUsers();
             } else {
                 if (editResponse.message.includes("RUT")) {
-                    showErrorAlert("Error", "El RUT ya estÃ¡ registrado");
+                    showErrorAlert("Error", "El RUT ya esta registrado");
                 }
 
                 if (editResponse.message.includes("email")) {
-                    showErrorAlert("Error", "El email ya estÃ¡ registrado");
+                    showErrorAlert("Error", "El email ya esta registrado");
                 }
             }
         } catch (error) {
@@ -135,7 +135,7 @@ const Users = () => {
     }
 
     const handleDeleteUser = async (id) => {
-        await showConfirmAlert("Eliminar usuario", "Â¿EstÃ¡ seguro que desea eliminar al usuario?", "Eliminar", async () => {
+        await showConfirmAlert("Eliminar usuario", "¿Estas seguro que desea eliminar al usuario?", "Eliminar", async () => {
         try {
             const deleteResponse = await deleteUser(id);
             
@@ -185,9 +185,9 @@ const Users = () => {
             <Navbar/>
 
             <div className="pt-20 p-4 flex flex-col">
-                {/* Contenido de la pÃ¡gina */}
+                {/* Contenido de la página */}
                 <div className="bg-white border-2 border-gray-200 rounded-xl px-6 py-5 flex flex-col gap-6">
-                    {/* Titulo, descripciÃ³n y boton de agregar usuario */}
+                    {/* Título, descripción y botón de agregar usuario */}
                     <div className="flex flex-row flex-1 justify-between items-center">
                         <div className="flex flex-col gap-1">
                             <h1 className="font-bold text-2xl">Usuarios</h1>
@@ -240,10 +240,10 @@ const Users = () => {
                                     <th className="min-w-10 h-12 px-4 text-left align-middle font-medium">Rol</th>
                                     <th className="min-w-10 h-12 px-4 text-left align-middle font-medium">Estado cuenta</th>
                                     <th className="min-w-10 h-12 px-4 text-left align-middle font-medium">
-                                        Fecha creaciÃ³n
+                                        Fecha creacion
                                     </th>
                                     <th className="min-w-10 h-12 px-4 text-left align-middle font-medium">
-                                        Fecha modificaciÃ³n
+                                        Fecha modificacion
                                     </th>
                                     <th className="min-w-10 h-12 px-4 text-center align-middle font-medium">
                                         Acciones
@@ -324,7 +324,7 @@ async function addUserDialog() {
         html:
         '<div class="text-start">' +
         '<p class="font-bold text-md mb-1">Agregar Usuario</p>' +
-        '<p class="text-sm text-gray-500">Completa la informaciÃ³n para agregar un nuevo usuario.</p>' +
+        '<p class="text-sm text-gray-500">Completa la información para agregar un nuevo usuario.</p>' +
         '<div class="flex flex-col gap-4 mt-4">' +
         // Input nombre
         '<div class="flex flex-col gap-0.5">' +
@@ -336,9 +336,9 @@ async function addUserDialog() {
         '<label for="email" class="text-sm font-medium">Email</label>' +
         '<input type="email" id="email" placeholder="luis@gmail.com" class="border border-gray-300 px-2 py-1 text-sm rounded-md outline-0 transition-all hover:shadow-sm focus:border-blue-700" />' +
         "</div>" +
-        // Input contraseÃ±a
+        // Input contraseña
         '<div class="flex flex-col gap-0.5">' +
-        '<label for="password" class="text-sm font-medium">ContraseÃ±a</label>' +
+        '<label for="password" class="text-sm font-medium">Contraseña</label>' +
         '<input type="password" id="password" class="border border-gray-300 px-2 py-1 text-sm rounded-md outline-0 transition-all hover:shadow-sm focus:border-blue-700" />' +
         "</div>" +
         // Input RUT
@@ -363,6 +363,8 @@ async function addUserDialog() {
         showCancelButton: true,
         cancelButtonText: "Cancelar",
         showCloseButton: true,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
 
         preConfirm: () => {
             const username = document.getElementById("username").value.trim();
@@ -401,12 +403,12 @@ async function addUserDialog() {
             }
 
             if (!password) {
-                Swal.showValidationMessage("La contraseÃ±a es obligatoria");
+                Swal.showValidationMessage("La contraseña es obligatoria");
                 return false;
             }
 
             if (password.length < 6) {
-                Swal.showValidationMessage("La contraseÃ±a debe tener al menos 6 caracteres");
+                Swal.showValidationMessage("La contraseña debe tener al menos 6 caracteres");
                 return false;
             }
 
@@ -416,7 +418,7 @@ async function addUserDialog() {
             }
 
             if (!rutRegex.test(rut)) {
-                Swal.showValidationMessage("El RUT debe ser ingresado sin puntos y con guiÃ³n");
+                Swal.showValidationMessage("El RUT debe ser ingresado sin puntos y con guión");
                 return false;
             }
 
@@ -426,7 +428,7 @@ async function addUserDialog() {
             }
 
             if (!roles.includes(role)) {
-                Swal.showValidationMessage("Debe seleccionar un rol vÃ¡lido");
+                Swal.showValidationMessage("Debe seleccionar un rol válido");
                 return false;
             }
 
@@ -452,7 +454,7 @@ async function editUserDialog(user) {
         html:
         '<div class="text-start">' +
         '<p class="font-bold text-md mb-1">Editar Usuario</p>' +
-        '<p class="text-sm text-gray-500">Completa la informaciÃ³n para editar usuario.</p>' +
+        '<p class="text-sm text-gray-500">Completa la información para editar usuario.</p>' +
         '<div class="flex flex-col gap-4 mt-4">' +
         // Input nombre
         '<div class="flex flex-col gap-0.5">' +
@@ -464,9 +466,9 @@ async function editUserDialog(user) {
         '<label for="email" class="text-sm font-medium">Email</label>' +
         '<input type="email" id="email" placeholder="'+user.email+'" value="'+user.email+'" class="border border-gray-300 px-2 py-1 text-sm rounded-md outline-0 transition-all hover:shadow-sm focus:border-blue-700" />' +
         "</div>" +
-        // Input contraseÃ±a
+        // Input contraseña
         '<div class="flex flex-col gap-0.5">' +
-        '<label for="password" class="text-sm font-medium">ContraseÃ±a</label>' +
+        '<label for="password" class="text-sm font-medium">Contraseña</label>' +
         '<input type="password" id="password" class="border border-gray-300 px-2 py-1 text-sm rounded-md outline-0 transition-all hover:shadow-sm focus:border-blue-700" />' +
         "</div>" +
         // Input RUT
@@ -491,6 +493,8 @@ async function editUserDialog(user) {
         showCancelButton: true,
         cancelButtonText: "Cancelar",
         showCloseButton: true,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
 
         preConfirm: () => {
             let username = document.getElementById("username").value.trim();
@@ -526,10 +530,10 @@ async function editUserDialog(user) {
                 return false;
             }
 
-            // La contraseÃ±a puede quedar vacÃ­a y no se cambia
+            // La contraseña puede quedar vacia y no se cambia
             // Pero si tiene al menos un caracter, entonces se debe validar correctamente
             if (password.length > 0 && password.length < 6) {
-                Swal.showValidationMessage("La contraseÃ±a debe tener al menos 6 caracteres");
+                Swal.showValidationMessage("La contraseña debe tener al menos 6 caracteres");
                 return false;
             }
 
@@ -538,7 +542,7 @@ async function editUserDialog(user) {
             }
 
             if (!rutRegex.test(rut)) {
-                Swal.showValidationMessage("El RUT debe ser ingresado sin puntos y con guiÃ³n");
+                Swal.showValidationMessage("El RUT debe ser ingresado sin puntos y con guion");
                 return false;
             }
 
@@ -548,7 +552,7 @@ async function editUserDialog(user) {
             }
 
             if (!roles.includes(role)) {
-                Swal.showValidationMessage("Debe seleccionar un rol vÃ¡lido");
+                Swal.showValidationMessage("Debe seleccionar un rol válido");
                 return false;
             }
 
