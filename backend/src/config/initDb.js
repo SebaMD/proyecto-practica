@@ -35,13 +35,6 @@ export async function createInitialUsers() {
                 password: await bcrypt.hash("Emilio123.", 10),
                 role: "supervisor",
             },
-            {
-                username: "Sebastián Medina",
-                email: "smedina@gmail.com",
-                rut: "20891000-k",
-                password: await bcrypt.hash("Sebastian123.", 10),
-                role: "ciudadano",
-            },
         ];
 
         for (const user of users) {
@@ -64,8 +57,8 @@ export async function createInitialPeriod(){
 
         const period = {
             name: "2025-2",
-            startDate: "2026-03-11T01:00:00.000Z",
-            closingDate: "2026-03-12T01:00:00.000Z",
+            startDate: "2026-03-23T01:00:00.000Z",
+            closingDate: "2026-03-25T01:00:00.000Z",
         };
 
         await periodRepository.save(periodRepository.create(period));
@@ -89,21 +82,21 @@ export async function createInitialPetitions(){
                 description: "Permite conducir vehículos motorizados particulares como automóviles y camionetas.",
                 objectives: "Evaluar conocimientos teóricos, habilidades prácticas y condiciones psicotécnicas del postulante.",
                 prerrequisites: "Tener 18 años cumplidos, cédula de identidad vigente, educación básica aprobada.",
-                dailyQuotas: 10,
+                dailyQuotas: 15,
             },
             {
                 name: "Licencia de Conducir Clase C",
                 description: "Permite conducir motocicletas y triciclos motorizados.",
                 objectives: "Evaluar conocimientos teóricos y habilidades prácticas para conducción segura de motocicletas.",
                 prerrequisites: "Tener 18 años cumplidos, cédula de identidad vigente.",
-                dailyQuotas: 10,
+                dailyQuotas: 15,
             },
             {
                 name: "Licencia de Conducir Clase A2",
                 description: "Habilita para conducir taxis, ambulancias y transporte público de pasajeros.",
                 objectives: "Verificar experiencia previa, conocimientos avanzados y aptitudes psicotécnicas.",
                 prerrequisites: "Tener 20 años o más, poseer licencia Clase B por al menos 2 años, hoja de vida del conductor sin infracciones graves.",
-                dailyQuotas: 10,
+                dailyQuotas: 15,
             },
         ];
 
