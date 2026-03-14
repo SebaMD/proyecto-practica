@@ -11,6 +11,8 @@ import {
     updatePetitionService
 } from "../services/petition.service.js";
 import { checkActivePeriodService } from "../services/period.service.js";
+import { getApprovedCitizenAndSupervisorUsersService } from "../services/user.service.js";
+import { sendPetitionCreatedNotifications } from "../services/email.service.js";
 
 export async function getAllPetitions(req, res) {
     try {
@@ -67,6 +69,13 @@ export async function createPetition(req, res) {
         }
 
         const newPetition = await createPetitionService(value);
+
+        try {
+            const usersToNotify = await getApprovedCitizenAndSupervisorUsersService();
+            await sendPetitionCreatedNotifications(usersToNotify, newPetition);
+        } catch (notifyError) {
+            console.error("No se pudieron enviar correos por nueva peticion:", notifyError.message);
+        }
 
         return res.status(201).json({
             message: "Peticion creada exitosamente.",

@@ -42,15 +42,14 @@ export async function deletePeriodService(id) {
 
     const result = await periodRepository.delete(id);
 
-    if (result.affected === 0) throw new Error("No se pudo eliminar el período.");
+    if (result.affected === 0) throw new Error("No se pudo eliminar el periodo .");
 
-    return { message: "Período eliminado exitosamente" };
+    return { message: "Periodo  eliminado exitosamente" };
 }
 
-// Verificar solapamiento de fechas 
 export async function checkPeriodOverlapService(fechaInicio, fechaCierre, excludeId = null) {
     const periodRepository = AppDataSource.getRepository(Period);
-    
+
     const whereClause = {
         startDate: LessThanOrEqual(fechaCierre),
         closingDate: MoreThanOrEqual(fechaInicio)
@@ -65,7 +64,6 @@ export async function checkPeriodOverlapService(fechaInicio, fechaCierre, exclud
     });
 }
 
-
 export async function getLatestClosedPeriodService() {
     const periodRepository = AppDataSource.getRepository(Period);
     const now = new Date();
@@ -79,14 +77,15 @@ export async function getLatestClosedPeriodService() {
         },
     });
 }
+
 export async function checkActivePeriodService() {
     const periodRepository = AppDataSource.getRepository(Period);
     const now = new Date();
 
     const activePeriod = await periodRepository.findOne({
         where: {
-        startDate: LessThanOrEqual(now),
-        closingDate: MoreThanOrEqual(now),
+            startDate: LessThanOrEqual(now),
+            closingDate: MoreThanOrEqual(now),
         },
     });
 

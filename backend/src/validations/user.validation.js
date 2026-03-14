@@ -54,7 +54,7 @@ export const editUserBodyValidation = Joi.object({
             return normalizedRut;
         }, "rut checksum")
         .messages({
-            "string.pattern.base": "El RUT debe ir sin puntos y con gui�n (ej: 12345678-9)",
+            "string.pattern.base": "El RUT debe ir sin puntos y con guion (ej: 12345678-9)",
             "string.empty": "El RUT no puede estar vacío ",
         }),
     role: Joi.string()

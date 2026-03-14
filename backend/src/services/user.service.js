@@ -10,6 +10,28 @@ export async function getUsersService() {
     });
 }
 
+export async function getApprovedCitizenUsersService() {
+    const userRepository = AppDataSource.getRepository(User);
+    return await userRepository.find({
+        where: {
+            role: "ciudadano",
+            accountStatus: "aprobado",
+        },
+        select: ["id", "username", "email"],
+    });
+}
+
+export async function getApprovedCitizenAndSupervisorUsersService() {
+    const userRepository = AppDataSource.getRepository(User);
+    return await userRepository.find({
+        where: [
+            { role: "ciudadano", accountStatus: "aprobado" },
+            { role: "supervisor", accountStatus: "aprobado" },
+        ],
+        select: ["id", "username", "email", "role"],
+    });
+}
+
 export async function getUserByIdService(id) {
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
