@@ -14,7 +14,7 @@ function normalizeDateOnly(dateValue) {
     return String(dateValue).slice(0, 10);
 }
 
-function getLatestDates(dates, limit = 5) {
+function getLatestDates(dates, limit = 10) {
     return [...new Set((dates || []).filter(Boolean))]
         .sort((a, b) => b.localeCompare(a))
         .slice(0, limit)

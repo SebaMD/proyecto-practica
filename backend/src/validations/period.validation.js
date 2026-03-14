@@ -56,3 +56,6 @@ export const periodActiveUpdateValidation = Joi.object({
     .messages({
         "object.unknown": "Solo se permite modificar la fecha de termino del periodo activo.",
     });
+
+
+

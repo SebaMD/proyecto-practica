@@ -35,7 +35,8 @@ const notifyUsersWhenPeriodIsCreatedOrUpdated = async (period) => {
 };
 
 const PERIOD_MIN_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
-const hasMinPeriodDuration = (startDate, closingDate) => (new Date(closingDate).getTime() - new Date(startDate).getTime()) >= PERIOD_MIN_DURATION_MS;
+const hasMinPeriodDuration = (startDate, closingDate) =>
+    (new Date(closingDate).getTime() - new Date(startDate).getTime()) >= PERIOD_MIN_DURATION_MS;
 
 export async function createPeriod(req, res) {
     try {

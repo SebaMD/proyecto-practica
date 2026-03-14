@@ -273,11 +273,16 @@ export async function exportAppointmentsReport(req, res) {
         await workbook.xlsx.write(res);
         res.end();
     } catch (error) {
-        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
+        if (
+            error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado") ||
+            error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")
+        ) {
             return handleErrorClient(res, 403, error.message);
         }
         if (
+            error.message?.includes("No existe un periodo cerrado para exportar") ||
             error.message?.includes("No existe un período cerrado para exportar") ||
+            error.message?.includes("La fecha no pertenece al ultimo periodo cerrado") ||
             error.message?.includes("La fecha no pertenece al último período cerrado") ||
             error.message?.includes("No hay citas aprobadas para esa fecha") ||
             error.message?.includes("No hay citas revisadas para esa fecha")
@@ -306,11 +311,16 @@ export async function getSupervisorReportDates(req, res) {
             dates
         );
     } catch (error) {
-        if (error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")) {
-            return handleSuccess(res, 200, "Exportación bloqueada mientras el período esté activo", []);
+        if (
+            error.message?.includes("La exportacion solo esta disponible cuando el periodo este cerrado") ||
+            error.message?.includes("La exportación solo está disponible cuando el período esté cerrado")
+        ) {
+            return handleSuccess(res, 200, "Exportacion bloqueada mientras el periodo este activo", []);
         }
-        if (error.message?.includes("No existe un período cerrado para exportar")) {
-            return handleSuccess(res, 200, "No hay períodos cerrados para exportar", []);
+        if (
+            error.message?.includes("No existe un periodo cerrado para exportar") ||
+            error.message?.includes("No existe un período cerrado para exportar")
+        ) {
         }
         handleErrorServer(res, 500, "Error al obtener fechas de reporte", error.message);
     }
