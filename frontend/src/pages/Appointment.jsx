@@ -145,7 +145,11 @@ const Appointments = () => {
                         <div>
                             <h1 className="font-bold text-2xl">Gestión de Citas</h1>
                             <p className="text-gray-600">
-                                {isCitizen ? "Revisa el estado de tus citas" : "Gestiona las solicitudes de citas"}
+                                {isCitizen
+                                    ? "Revisa el estado de tus citas"
+                                    : supervisorView === "reviews"
+                                        ? "Solicitudes de citas ya revisadas."
+                                        : "Revisa y responde solicitudes de citas"}
                             </p>
                         </div>
 
@@ -214,7 +218,9 @@ const Appointments = () => {
                     {!loading && appointments.length === 0 && (
                         <p className="text-gray-600 italic flex gap-2 items-center">
                         <CheckCircle className="h-5 w-5" />
-                            No hay citas registradas.
+                            {supervisorView === "reviews"
+                                ? "No hay citas revisadas."
+                                : "No hay citas registradas para revisar."}
                         </p>
                     )}
 
@@ -347,3 +353,5 @@ const Appointments = () => {
 };
 
 export default Appointments;
+
+

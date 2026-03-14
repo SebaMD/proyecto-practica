@@ -57,6 +57,11 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
     request?.citizenId?.username ||
     request?.citizenId?.email ||
     `Ciudadano #${typeof request?.citizenId === "object" ? request?.citizenId?.id : request?.citizenId}`;
+  const rejectReasonPreview = request.rejectReason
+    ? request.rejectReason.length > 44
+      ? `${request.rejectReason.slice(0, 44)}...`
+      : request.rejectReason
+    : "";
 
   const handleViewDetails = async () => {
     const formValues = await requestDetailsDialog(request, petition, isFuncionario);
@@ -136,7 +141,7 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
   if (isCiudadano) {
     return (
       <div
-        className="relative border border-gray-300 px-6 py-4 rounded-md bg-white pr-16 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+        className="relative border border-gray-300 px-6 py-4 rounded-md bg-white pr-24 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
       >
         <div>
           <div className="flex flex-row gap-4 items-center mb-2">
@@ -170,8 +175,9 @@ export function Request({ request, isCompact = false, fetchCallback = null }) {
           )}
 
           {request.rejectReason && (
-            <div className="mt-2 inline-flex w-fit items-center gap-1 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
-              <strong>Motivo rechazo:</strong> {request.rejectReason}
+            <div className="mt-2 inline-flex max-w-[calc(100%-5rem)] items-center gap-1 p-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
+              <strong className="shrink-0">Motivo:</strong>
+              <span className="truncate">{rejectReasonPreview}</span>
             </div>
           )}
         </div>

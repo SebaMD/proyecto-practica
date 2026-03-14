@@ -157,6 +157,17 @@ export function Appointment({ appointment, onActionSuccess }) {
                         }</p>
                         <p><strong>Estado:</strong> ${appointment.status || "-"}</p>
                     </div>
+
+                    ${
+                        appointment.rejectReason
+                            ? `
+                    <div style="padding:10px; border:1px solid #fecaca; border-radius:8px; background:#fef2f2;">
+                        <p style="font-weight:600; margin-bottom:6px; color:#b91c1c;">Motivo de rechazo</p>
+                        <p style="color:#7f1d1d; white-space:pre-wrap;">${appointment.rejectReason}</p>
+                    </div>
+                    `
+                            : ""
+                    }
                 </div>
             `,
             confirmButtonText: "Cerrar",
@@ -204,8 +215,14 @@ export function Appointment({ appointment, onActionSuccess }) {
     const requestedDate = appointment.schedule?.date || "-";
 
     const requestedHour = appointment.schedule ? `${appointment.schedule.startTime?.slice(0, 5)} - ${appointment.schedule.endTime?.slice(0, 5)}` : "-";
+    const rejectReasonPreview = appointment.rejectReason
+        ? appointment.rejectReason.length > 36
+            ? `${appointment.rejectReason.slice(0, 36)}...`
+            : appointment.rejectReason
+        : "";
     const canArchiveReviewedAppointment = (() => {
         if (!isSupervisor || appointment.status === "pendiente") return false;
+        if (appointment.status === "rechazado") return true;
 
         const date = appointment?.schedule?.date;
         const endTime = String(appointment?.schedule?.endTime || "").slice(0, 5);
@@ -265,13 +282,17 @@ export function Appointment({ appointment, onActionSuccess }) {
                 </p>
             </div>
 
-            {appointment.rejectReason && (
-                <div className="inline-flex w-fit p-2 rounded-md border border-red-300 bg-red-50 text-red-700 text-sm">
-                    <strong>Motivo:</strong> {appointment.rejectReason}
-                </div>
-            )}
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                {appointment.rejectReason ? (
+                    <div className="min-w-0 max-w-full inline-flex w-fit items-center gap-1 p-2 rounded-md border border-red-300 bg-red-50 text-red-700 text-sm">
+                        <strong className="shrink-0">Motivo:</strong>
+                        <span className="truncate">{rejectReasonPreview}</span>
+                    </div>
+                ) : (
+                    <div />
+                )}
 
-            <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 shrink-0">
                 {isCiudadano && (
                 <button
                     onClick={handleViewPetitionInfo}
@@ -321,6 +342,7 @@ export function Appointment({ appointment, onActionSuccess }) {
                     Revisar
                 </button>
                 )}
+                </div>
             </div>
         </div>
     );

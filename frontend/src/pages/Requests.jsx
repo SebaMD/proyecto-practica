@@ -442,7 +442,9 @@ const Requests = () => {
                             <p className="text-gray-600">
                                 {isCiudadano
                                     ? "Solicita la renovación y espera la programación del retiro de tu licencia."
-                                    : "Revisa y responde solicitudes de renovación de licencia."}
+                                    : isFuncionarioReviewsView
+                                        ? "Solicitudes de renovación de licencia ya revisadas."
+                                        : "Revisa y responde solicitudes de renovación de licencia."}
                             </p>
                         </div>
 
@@ -577,7 +579,10 @@ const Requests = () => {
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-gray-500 italic">No tienes solicitudes de renovación pendientes</p>
+                                        <p className="text-gray-500 italic flex items-center gap-2">
+                                            <MessageSquareDashedIcon size={18} />
+                                            No tienes solicitudes de renovación pendientes
+                                        </p>
                                     )}
                                 </div>
 
@@ -777,7 +782,7 @@ const Requests = () => {
                     {!loading && !isCiudadano && requests.length === 0 && (
                         <p className="text-gray-600 italic flex items-center gap-2">
                             <CheckCircle />
-                            No hay renovaciones por revisar
+                            {isFuncionarioReviewsView ? "No hay solicitudes revisadas" : "No hay renovaciones por revisar"}
                         </p>
                     )}
                 </div>
@@ -929,3 +934,6 @@ async function createRequestDialog(preselectedPetition = null) {
 
     return value || null;
 }
+
+
+
