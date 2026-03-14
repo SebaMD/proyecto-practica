@@ -75,9 +75,8 @@ const Period = () => {
     };
 
     const getDateOnly = (value) => String(value || "").slice(0, 10);
-    // Cambio pendiente para después de las pruebas:
-    // para exigir una duración mínima de 2 días también en frontend.
-    // const PERIOD_MIN_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
+
+    const PERIOD_MIN_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 
     const openPeriodModal = async (period = null) => {
         const isEdit = !!period;
@@ -223,20 +222,20 @@ const Period = () => {
                         return false;
                     }
 
-                    // if ((new Date(closingDate).getTime() - new Date(startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
-                    //     Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
-                    //     return false;
-                    // }
+                    if ((new Date(closingDate).getTime() - new Date(startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
+                        Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
+                        return false;
+                    }
                 } else {
                     if (new Date(closingDate) <= new Date(period.startDate)) {
                         Swal.showValidationMessage("La fecha de termino debe ser posterior a la de inicio");
                         return false;
                     }
 
-                    // if ((new Date(closingDate).getTime() - new Date(period.startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
-                    //     Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
-                    //     return false;
-                    // }
+                    if ((new Date(closingDate).getTime() - new Date(period.startDate).getTime()) < PERIOD_MIN_DURATION_MS) {
+                        Swal.showValidationMessage("El período debe tener una duración mínima de 2 días.");
+                        return false;
+                    }
                 }
 
                 try {
@@ -312,7 +311,7 @@ const Period = () => {
 
             <div className="pt-20 p-6">
                 <div className="bg-white border rounded-xl p-6 flex flex-col gap-6">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start gap-4">
                         <div>
                             <h1 className="text-xl font-bold">Gestión de períodos</h1>
                             <p className="text-gray-500 text-sm">
@@ -320,13 +319,19 @@ const Period = () => {
                             </p>
                         </div>
 
-                        <button
-                            onClick={() => openPeriodModal()}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-                        >
-                            <CalendarPlus className="h-4 w-4" />
-                            Nuevo período
-                        </button>
+                        <div className="flex items-center gap-3 max-w-2xl">
+                            <p className="text-sm text-left text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                                Al crear o actualizar un período se enviará un correo de aviso a ciudadanos y supervisores.
+                            </p>
+
+                            <button
+                                onClick={() => openPeriodModal()}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 shrink-0"
+                            >
+                                <CalendarPlus className="h-4 w-4" />
+                                Nuevo período
+                            </button>
+                        </div>
                     </div>
 
                     <div className="overflow-auto border rounded-lg">
