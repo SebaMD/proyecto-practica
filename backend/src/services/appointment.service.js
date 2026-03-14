@@ -301,6 +301,10 @@ export async function archiveReviewedAppointmentBySupervisorService(id, supervis
     if (Number(appointment.supervisorId) !== Number(supervisorId)) {
         throw new Error("La inscripción no pertenece a las revisiones del supervisor");
     }
+    if (appointment.status === "rechazado") {
+        appointment.archived = true;
+        return await appointmentRepository.save(appointment);
+    }
     const scheduleDate = appointment?.schedule?.date;
     const scheduleEnd = String(appointment?.schedule?.endTime || "").slice(0, 5);
     if (!scheduleDate || !scheduleEnd) {
@@ -351,3 +355,4 @@ export async function updateStatusService(id, data, supervisorId){
 
     return savedAppointment;
 }
+

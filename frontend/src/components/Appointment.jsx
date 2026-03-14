@@ -199,6 +199,17 @@ export function Appointment({ appointment, onActionSuccess }) {
                         <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Prerrequisitos</p>
                         <p class="text-sm text-gray-800">${appointment.petition?.prerrequisites || "Sin prerrequisitos"}</p>
                     </div>
+
+                    ${
+                        appointment.rejectReason
+                            ? `
+                    <div class="border border-red-200 rounded-lg p-3 bg-red-50">
+                        <p class="text-xs font-semibold text-red-700 uppercase mb-1">Motivo de rechazo</p>
+                        <p class="text-sm text-red-800 whitespace-pre-wrap">${appointment.rejectReason}</p>
+                    </div>
+                    `
+                            : ""
+                    }
                 </div>
             `,
             confirmButtonText: "Cerrar",
