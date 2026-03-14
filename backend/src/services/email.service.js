@@ -139,31 +139,3 @@ export const sendPeriodScheduledNotifications = async (users, period) => {
 
     await Promise.allSettled(users.map((user) => sendPeriodScheduledEmail(user, period)));
 };
-
-export const sendPetitionCreatedEmail = async (user, petition) => {
-    if (!user?.email || !petition) return;
-
-    const subject = "Nueva petición disponible en el sistema";
-    const text = `Hola ${user.username}, se creo la petición ${petition.name}. Puedes ingresar al sistema para revisar la nueva petición y sus horarios cuando sean definidos.`;
-    const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: #0f766e; color: white; padding: 20px; border-radius: 10px 10px 0 0;">
-                <h2 style="margin: 0;">Nueva petición disponible</h2>
-            </div>
-            <div style="background: white; padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-                <p>Hola <strong>${user.username}</strong>,</p>
-                <p>Se creo la petición <strong>${petition.name}</strong>.</p>
-                <p>Puedes ingresar al sistema para revisar la nueva petición y sus horarios cuando sean definidos.</p>
-                <p style="margin-top: 24px;">Atentamente,<br><strong>Sistema de Licencias</strong></p>
-            </div>
-        </div>
-    `;
-
-    await sendEmail(user.email, subject, text, html);
-};
-
-export const sendPetitionCreatedNotifications = async (users, petition) => {
-    if (!Array.isArray(users) || users.length === 0 || !petition) return;
-
-    await Promise.allSettled(users.map((user) => sendPetitionCreatedEmail(user, petition)));
-};
